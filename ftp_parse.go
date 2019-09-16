@@ -1,8 +1,6 @@
 package main
 import (
-	"fmt"
 	"strings"
-	"io/ioutil"
 	"strconv"
 )
 const (
@@ -26,6 +24,7 @@ func filter_spaces(list []string) []string {
 	}
 	return filtered
 }
+
 func parse_ls_line(line string) (string, Node) {
 	var node Node
 	node.size, _ = strconv.Atoi(filter_spaces(strings.Split(line, " "))[4])
@@ -36,19 +35,19 @@ func parse_ls_line(line string) (string, Node) {
 	} else {
 		node.nodetype = file
 	}
+	node.files = make(NodeMap)
 	name := strings.Split(line, "\"")[1]
 	return name, node
 }
-func main() {
-	dat, _ := ioutil.ReadFile("res.txt")
-	rawstr := string(dat)
-	//fmt.Print(rawstr)
-	lines := strings.Split(rawstr, "\n")
-	root_dir := make(NodeMap)
+func get_subdir(path string, root_dir *Node) *Node {
+	steps := strings.Split(path, "/")
+	node := root_dir
+	for _, subdir := range steps {
+		if subdir == "" {
+			continue
+		}
 
-	fmt.Printf("%q\n", lines[15])
-	name, node := parse_ls_line(lines[15])
-	root_dir[name] = &node
-
-	fmt.Printf("%q\n", root_dir[name])
+		node = node.files[subdir]
+	}
+	return node
 }
