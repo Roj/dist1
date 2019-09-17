@@ -22,7 +22,8 @@ type ServerResources struct {
 }
 type ServerResourcesMap map[string]*ServerResources
 
-const MAXTHREADSANDQUEUED = 1
+const MAXTHREADSANDQUEUED = 3
+const DBHOSTPORT = "db:11000"
 
 // Inicia los recursos para un servidor FTP si no estaba ya disponible
 // Poscondicion: existe en el mapa la key host, hay al menos un task
@@ -35,7 +36,7 @@ func init_serverresources(host string, dict ServerResourcesMap) {
 
 // Wrap sencillo de write para poder imprimir e ir viendo.
 func send(conn net.Conn, s string) {
-	fmt.Printf(">%s", s)
+	//fmt.Printf(">%s", s)
 	conn.Write([]byte(s))
 }
 
@@ -48,20 +49,40 @@ func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener) {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), time.Second)
 	if err != nil {
 		fmt.Println(err)
+		fmt.Println("Waiting one second and trying again..")
+		time.Sleep(time.Second)
 		return setup_ftp(host, port)
 		os.Exit(1)
 	}
 	lhost, lport, _ := net.SplitHostPort(conn.LocalAddr().String())
 	fmt.Printf("Local address is is %s:%s\n", lhost, lport)
 	connbuf := bufio.NewReader(conn)
-	send(conn, "USER joaquintz\n")
-	send(conn, "PASS charmander12!\n")
-
-
+	for {
+		str, _ := connbuf.ReadString('\n')
+		if strings.Contains(str, "220") {
+			break
+		}
+	}
 	dataserver, err := net.Listen("tcp", fmt.Sprintf(":%d",port))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+	//time.Sleep(2*time.Second)
+	send(conn, "USER anonymous\r\n")
+	send(conn, "SYST\r\n")
+	for {
+		str, err := connbuf.ReadString('\n')
+		/*if len(str) > 0 {
+			fmt.Printf("<%s", str)
+		}*/
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+			os.Exit(1)
+		}
+		if strings.Contains(str, "230") {
+			break
+		}
 	}
 
 	return conn, connbuf, dataserver
@@ -75,12 +96,12 @@ func send_command(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
 	second_octet := port - first_octet*256
 	//TODO: ver si tira error, reintentar, backoff, agregar al queue-socket.
 	//TODO IP
-	send(conn, fmt.Sprintf("PORT 127,0,0,1,%d,%d\n", first_octet, second_octet))
+	send(conn, fmt.Sprintf("PORT 127,0,0,1,%d,%d\r\n", first_octet, second_octet))
 	for {
 		str, err := connbuf.ReadString('\n')
-		if len(str) > 0 {
+		/*if len(str) > 0 {
 			fmt.Printf("<%s", str)
-		}
+		}*/
 		if err != nil {
 			fmt.Printf("Error: %s", err)
 			return
@@ -89,13 +110,13 @@ func send_command(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
 			break
 		}
 	}
-	send(conn, fmt.Sprintf("%s\n", cmd))
+	send(conn, fmt.Sprintf("%s\r\n", cmd))
 	//Now we wait until the command is complete (226)
 	for {
 		str, _ := connbuf.ReadString('\n')
-		if len(str) > 0 {
+		/*if len(str) > 0 {
 			fmt.Printf("<%s", str)
-		}
+		}*/
 		if strings.Contains(str, "226") {
 			break;
 		}
@@ -133,10 +154,10 @@ func parse_ls(path string, dataserver net.Listener) (Node, []string) {
 		node.Size += _node.Size
 
 		if _node.Type == dir {
-			fmt.Printf("Encolamos %s\n", _node.Path)
+			//fmt.Printf("Encolamos %s\n", _node.Path)
 			queue = append(queue, _node.Path)
 		}
-		fmt.Printf("Path=%s, _str = %s, node = %q\n", path, _str, _node)
+		//fmt.Printf("Path=%s, _str = %s, node = %q\n", path, _str, _node)
 		//fmt.Println(_node.nodetype, _str, _node.size)
 
 
@@ -150,7 +171,7 @@ func update_db(host string, node Node) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	conn, err := net.Dial("tcp", "127.0.0.1:11000")
+	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -164,7 +185,7 @@ func update_db(host string, node Node) {
 	for {
 		str, _ := connbuf.ReadString('\n')
 		if str == "OK\n" {
-			fmt.Println("POBRE VICKY")
+			//fmt.Println("POBRE VICKY")
 			break
 		} else {
 			fmt.Println("Unknown message ", str)
@@ -185,8 +206,8 @@ func register_thread(host string, dict ServerResourcesMap) {
 func unregister_thread(host string, dict ServerResourcesMap) {
 	hostres := dict[host]
 	hostres.lock.Lock()
-	fmt.Printf("[THREAD] UNRegistering thread!!")
 	hostres.nthreads = hostres.nthreads - 1
+	fmt.Printf("[THREAD] Unregistering thread - tasks %d threads %d\n", hostres.nqueued, hostres.nthreads)
 	hostres.lock.Unlock()
 }
 func distribute_jobs(queue []string, host string, hostres *ServerResources) []string {
@@ -220,7 +241,8 @@ func run_analysis(host string, path string, idworker int, resourcesmap ServerRes
 
 		// Skip /proc/ because it doesn't make sense and causes special errors
 		queue = filter_strlist(append(queue, new_queue...), "/proc/")
-		fmt.Printf("Adjusted queue is %s\n", queue)
+		queue = filter_strlist(append(queue, new_queue...), "/sys/")
+		//fmt.Printf("Adjusted queue is %s\n", queue)
 
 		// See if we can parallelize
 		if it == next_thread_check {
@@ -230,13 +252,13 @@ func run_analysis(host string, path string, idworker int, resourcesmap ServerRes
 		it = it + 1
 	}
 
-	send(conn, "BYE\n")
+	send(conn, "BYE\r\n")
 	conn.Close()
 	dataserver.Close()
 	unregister_thread(host, resourcesmap)
 }
 func also_process(msg string) {
-	fmt.Printf("Also process.. -- '%s'", msg)
+	//fmt.Printf("Also process.. -- '%s'", msg)
 	conn, err := net.DialTimeout("tcp", ":50000", time.Second)
 	if err != nil {
 		fmt.Println(err)
@@ -250,7 +272,7 @@ func also_process(msg string) {
 	}
 	defer conn.Close()
 	send(conn, msg)
-	fmt.Println("Cerrando alsoprocess")
+	//fmt.Println("Cerrando alsoprocess")
 }
 
 func worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap ServerResourcesMap) {
@@ -265,9 +287,9 @@ func worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap Server
 		if len(parts) == 2 {
 			path = parts[1]
 		}
-		fmt.Println("Recibido trabajo! ",host, " y path ", path, " en worker ", i)
+		fmt.Printf("[THREAD %d] Recibido trabajo [%s:%s]\n", i, host, path)
 		run_analysis(host, path, i, resourcesmap)
-		fmt.Println("Finalizado el procesaje")
+		fmt.Printf("[THREAD %d] Finalizado trabajo\n", i, host, path)
 	}
 }
 func main() {

@@ -2,7 +2,7 @@ package main
 import (
 	"strings"
 	"strconv"
-	"fmt"
+	//"fmt"
 )
 const (
 	dir = iota
@@ -52,7 +52,7 @@ func filter_spaces(list []string) []string {
 }
 
 func parse_ls_line(line string) (string, Node) {
-	fmt.Printf("parse_ls_line: %s\n", line)
+	//fmt.Printf("parse_ls_line: %s\n", line)
 	var node Node
 	node.Size, _ = strconv.Atoi(filter_spaces(strings.Split(line, " "))[4])
 	if line[0] == 'd' {
@@ -63,7 +63,8 @@ func parse_ls_line(line string) (string, Node) {
 		node.Type = file
 	}
 	node.Files = make(NodeMap)
-	name := strings.Split(line, "\"")[1]
+	parts := filter_spaces(strings.Split(line, " ") )
+	name := parts[len(parts)-1]
 	return name, node
 }
 func get_subdir(path string, root_dir *Node) *Node {
@@ -84,7 +85,7 @@ func update_parents_size(path string, root_dir *Node, size int) {
 	node := root_dir
 	node.Size = node.Size + size
 	for _, subdir := range strings.Split(path, "/") {
-		fmt.Printf("Escribiendo nodo %s, bajando a subdir %s\n", node.Path, subdir)
+		//fmt.Printf("Escribiendo nodo %s, bajando a subdir %s\n", node.Path, subdir)
 		if subdir == "" {
 			continue
 		}

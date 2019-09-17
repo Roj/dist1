@@ -1,0 +1,21 @@
+version: "3"
+services:
+  daemon:
+    build:
+      context: .
+      dockerfile: daemon/Dockerfile
+    ports:
+      - "11001:11001"
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+  db:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+
+  ftpserver:
+    build: ftpserv
+    ports:
+     - "1021:21"

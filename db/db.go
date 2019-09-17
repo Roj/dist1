@@ -10,12 +10,13 @@ import (
 func add_dir(dict ServerMap, server string, node Node) {
 	fmt.Printf("Es una escritura del host %s sobre el directorio %s\n", server, node.Path)
 	// It always exists
-	encoded, _ := json.Marshal(node)
+	dbnode := get_subdir(node.Path, dict[server].root_dir)
+	/*encoded, _ := json.Marshal(node)
 	fmt.Printf("add_dir a escribir: %s\n", encoded)
 
-	dbnode := get_subdir(node.Path, dict[server].root_dir)
+
 	encoded, _ = json.Marshal(node)
-	fmt.Printf("add_dir -- en la DB: %s\n", encoded)
+	fmt.Printf("add_dir -- en la DB: %s\n", encoded)*/
 	dbnode.Files = node.Files
 	update_parents_size(node.Path, dict[server].root_dir, node.Size)
 }
@@ -62,17 +63,17 @@ func main() {
 	fmt.Printf("Listening on port 11000")
 	servermap := make(ServerMap)
 	for {
-		fmt.Println("Esperando conexion..")
+		//fmt.Println("Esperando conexion..")
 		conn, err := dblisten.Accept()
-		fmt.Println("[DB] Recibida conexion")
+		//fmt.Println("[DB] Recibida conexion")
 		if err != nil {
 			fmt.Println("Error!!")
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		fmt.Println("Leyendo...")
+		//fmt.Println("Leyendo...")
 		msg, err := bufio.NewReader(conn).ReadString('\n')
-		fmt.Println("Leido!")
+		//fmt.Println("Leido!")
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)

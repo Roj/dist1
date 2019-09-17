@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"encoding/json"
 )
+const DBHOSTPORT = "db:11000"
+const WORKERHOSTPORT = "worker:50000"
 func send(conn net.Conn, s string) {
 	fmt.Printf(">%s\n", s)
 	conn.Write([]byte(s))
@@ -15,7 +17,7 @@ func send(conn net.Conn, s string) {
 // if it did not exist. Returns true if server
 // was created, false if it already existed.
 func create_db_analysis(host string) bool {
-	conn, err := net.Dial("tcp", "127.0.0.1:11000")
+	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -42,8 +44,26 @@ func create_db_analysis(host string) bool {
 	}
 
 }
+func runanalysis(host string) {
+
+	conn, err := net.Dial("tcp", WORKERHOSTPORT)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	//TODO: if false..
+	create_db_analysis(host)
+
+	send(conn, fmt.Sprintf("%s /\n", host))
+}
+func process_request(command string) {
+	//TODO: analyze results..
+	host := ""
+	fmt.Sscanf(command, "analyze %s", &host)
+	runanalysis(host)
+}
 func main() {
-	/*server, err := net.Listen("tcp", ":11001")
+	server, err := net.Listen("tcp", ":11001")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -57,19 +77,11 @@ func main() {
 		}
 		buf := bufio.NewScanner(conn)
 		for buf.Scan() {
-			fmt.Println(buf.Text())
+			process_request(buf.Text())
+
 		}
-	}*/
-	conn, err := net.Dial("tcp", "127.0.0.1:50000")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
 	}
-	create_db_analysis("127.0.0.3") //TODO: if false..
-	for _, _ = range []int{1} {
-		send(conn, "127.0.0.3 /\n")
-	}/**/
-	/*/**/
+
 
 
 	//crear la estructura en la DB
