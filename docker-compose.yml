@@ -19,3 +19,13 @@ services:
     build: ftpserv
     ports:
      - "1021:21"
+  
+  ftpserver_broad:
+    build: ftpservbroad
+    ports:
+     - "3021:21"
+
+  ftpserver_fat:
+    build: ftpservfat
+    ports:
+     - "2021:21"
