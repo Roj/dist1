@@ -37,7 +37,19 @@ type Query struct {
 	Hostname string
 	Node Node
 }
-
+type ResultsResponse struct {
+	Finished bool
+	Node Node
+}
+func str_nodetype(node Node) string {
+	if node.Type == dir {
+		return "dir"
+	} else if node.Type == link {
+		return "link"
+	} else {
+		return "file"
+	}
+}
 func filter_strlist(list []string, toskip string) []string {
 	var filtered []string
 	for _, name := range list {

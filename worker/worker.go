@@ -164,8 +164,7 @@ func parse_ls(path string, dataserver net.Listener) (Node, []string) {
 	}
 	return node, queue
 }
-func update_db(host string, node Node) {
-	query := Query{write, host, node}
+func send_command_db(query Query) {
 	bytejson, err := json.Marshal(query)
 	if err != nil {
 		fmt.Println(err)
@@ -181,18 +180,25 @@ func update_db(host string, node Node) {
 		send(conn, fmt.Sprintf("%s\n", bytejson))
 	}
 	connbuf := bufio.NewReader(conn)
-	//Now we wait until the command is complete (226)
 	for {
 		str, _ := connbuf.ReadString('\n')
 		if str == "OK\n" {
-			//fmt.Println("POBRE VICKY")
 			break
 		} else {
 			fmt.Println("Unknown message ", str)
 		}
 	}
 }
-
+func update_db(host string, node Node) {
+	query := Query{write, host, node}
+	send_command_db(query)
+}
+func finish_job_db(host string) {
+	fmt.Println("Job finished for host ", host)
+	var _node Node
+	query := Query{finishserver, host, _node}
+	send_command_db(query)
+}
 func register_thread(host string, dict ServerResourcesMap) {
 	init_serverresources(host, dict)
 	hostres := dict[host]
@@ -208,6 +214,9 @@ func unregister_thread(host string, dict ServerResourcesMap) {
 	hostres.lock.Lock()
 	hostres.nthreads = hostres.nthreads - 1
 	fmt.Printf("[THREAD] Unregistering thread - tasks %d threads %d\n", hostres.nqueued, hostres.nthreads)
+	if hostres.nqueued == 0 && hostres.nthreads == 0 {
+		finish_job_db(host)
+	}
 	hostres.lock.Unlock()
 }
 func distribute_jobs(queue []string, host string, hostres *ServerResources) []string {
