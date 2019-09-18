@@ -4,7 +4,7 @@ COPY inetd.conf /etc/
 #RUN apk add busybox-extras && which inetd
 #&& inetd /etc/inetd.conf
 
-RUN mkdir /data && for i in {1..10}; do \
+RUN mkdir /data && for i in $(seq 1 10); do \
 		fallocate -l 100M /data/$i.txt; done
 
 #CMD busybox ftpd -w /
