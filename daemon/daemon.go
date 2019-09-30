@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"strings"
+	"../storage"
 )
 const DBHOSTPORT = "db:11000"
 const WORKERHOSTPORT = "worker:50000"
@@ -14,7 +15,7 @@ func send(conn net.Conn, s string) {
 	fmt.Printf(">%s\n", s)
 	conn.Write([]byte(s))
 }
-func send_query_db(query Query) string {
+func send_query_db(query storage.Query) string {
 	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
@@ -37,8 +38,8 @@ func send_query_db(query Query) string {
 // if it did not exist. Returns true if server
 // was created, false if it already existed.
 func create_db_analysis(host string) bool {
-	node := Node{dir, 0, "/", make(NodeMap)}
-	query := Query{newserver, host, node}
+	node := storage.Node{storage.Dir, 0, "/", make(storage.NodeMap)}
+	query := storage.Query{storage.Newserver, host, node}
 	str := send_query_db(query)
 	if str == "OK\n" {
 		return true
@@ -61,21 +62,21 @@ func runanalysis(host string) string {
 	send(conn, fmt.Sprintf("%s /\n", host))
 	return "OK"
 }
-func pretty_print_results(node Node) string {
+func pretty_print_results(node storage.Node) string {
 	str := ""
 	str = str + fmt.Sprintf("%s (%d bytes)\n", node.Path, node.Size)
 	for k, v := range node.Files {
-		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, str_nodetype(*v), v.Size)
+		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, storage.Str_nodetype(*v), v.Size)
 	}
 	return str
 
 }
 func getresult(path string, host string) string {
 	fmt.Println("Armando resultados")
-	node := Node{dir, 0, path +"/", make(NodeMap)}
-	query := Query{read, host, node}
+	node := storage.Node{storage.Dir, 0, path +"/", make(storage.NodeMap)}
+	query := storage.Query{storage.Read, host, node}
 	str := send_query_db(query)
-	var response ResultsResponse
+	var response storage.ResultsResponse
 	err := json.Unmarshal([]byte(str), &response)
 	if err != nil {
 		fmt.Printf("Error decoding:%s", err)

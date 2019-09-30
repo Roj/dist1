@@ -5,41 +5,24 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"../storage"
 )
 
-func add_dir(dict ServerMap, server string, node Node) {
-	fmt.Printf("Es una escritura del host %s sobre el directorio %s\n", server, node.Path)
-	// It always exists
-	dbnode := get_subdir(node.Path, dict[server].root_dir)
-	/*encoded, _ := json.Marshal(node)
-	fmt.Printf("add_dir a escribir: %s\n", encoded)
-	encoded, _ = json.Marshal(node)
-	fmt.Printf("add_dir -- en la DB: %s\n", encoded)*/
-	dbnode.Files = node.Files
-	update_parents_size(node.Path, dict[server].root_dir, node.Size)
-}
-func make_shallow_node(n Node) Node {
-	shallow := Node{n.Type, n.Size, n.Path, make(NodeMap)}
-	for k, v := range n.Files {
-		shallow.Files[k] = &Node{v.Type, v.Size, v.Path, make(NodeMap)}
-	}
-	return shallow
-}
-func get_dir(dict ServerMap, host string, path string) string {
+func get_dir(dict storage.ServerMap, host string, path string) string {
 	fmt.Printf("Es una consulta del host %s sobre el directorio %s\n", host, path)
 
-	var response ResultsResponse
+	var response storage.ResultsResponse
 	if server, ok := dict[host]; ok {
-		response.Finished = server.finished
-		response.Node = Node{file, 0, "/", make(NodeMap)}
-		if server.finished {
-			node := get_subdir(path, server.root_dir)
-			shallow_node := make_shallow_node(*node)
+		response.Finished = server.Finished
+		response.Node = storage.Node{storage.File, 0, "/", make(storage.NodeMap)}
+		if server.Finished {
+			node := storage.Get_subdir(path, server.Root_dir)
+			shallow_node := storage.Shallow_copy(*node)
 			response.Node = shallow_node
 		}
 	} else {
 		response.Finished = false
-		response.Node = Node{file, -1, "/", make(NodeMap)}
+		response.Node = storage.Node{storage.File, -1, "/", make(storage.NodeMap)}
 	}
 
 	encoded, _ := json.Marshal(response)
@@ -52,29 +35,30 @@ func send(conn net.Conn, s string) {
 }
 // Process a given query and produces a response to be sent to the
 // client (without \n)
-func process_query(query Query, servermap ServerMap) string {
+func process_query(query storage.Query, servermap storage.ServerMap) string {
 	//TODO: queryResponse
 	//fmt.Printf("El nodo recibido es el de path %s\n", query.Node.Path)
 	switch query.Type {
-	case read:
+	case storage.Read:
 
 		return get_dir(servermap, query.Hostname, query.Node.Path)
-	case write:
-		add_dir(servermap, query.Hostname, query.Node)
-	case newserver:
+	case storage.Write:
+		fmt.Printf("Es una escritura del host %s sobre el directorio %s\n", query.Hostname, query.Node.Path)
+		storage.Add_dir(servermap, query.Hostname, query.Node)
+	case storage.Newserver:
 		if _, ok := servermap[query.Hostname]; ok {
 			return "ALREADYEXISTS"
 		}
-		servermap[query.Hostname] = &Server{
-			query.Hostname, false, &Node{dir, 0, "/", make(NodeMap)}}
+		servermap[query.Hostname] = &storage.Server{
+			query.Hostname, false, &storage.Node{storage.Dir, 0, "/", make(storage.NodeMap)}}
 
-	case finishserver:
+	case storage.Finishserver:
 		fmt.Printf("Terminando server %s\n", query.Hostname)
-		servermap[query.Hostname].finished = true
+		servermap[query.Hostname].Finished = true
 	}
 	//encoded, _ := json.Marshal(servermap[query.Hostname].root_dir)
 	//fmt.Printf("Ahora el servidor queda como: %s\n", encoded)
-	fmt.Printf("El tamaño actual del host %s es %d\n", query.Hostname, servermap[query.Hostname].root_dir.Size)
+	fmt.Printf("El tamaño actual del host %s es %d\n", query.Hostname, servermap[query.Hostname].Root_dir.Size)
 	return "OK"
 }
 func main() {
@@ -85,7 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Listening on port 11000")
-	servermap := make(ServerMap)
+	servermap := make(storage.ServerMap)
 	for {
 		//fmt.Println("Esperando conexion..")
 		conn, err := dblisten.Accept()
@@ -104,7 +88,7 @@ func main() {
 		}
 		msg = msg[:len(msg)-1] //trailing \n
 		// Unserialize message
-		var query Query
+		var query storage.Query
 		err = json.Unmarshal([]byte(msg), &query)
 		response := process_query(query, servermap)
 		send(conn, fmt.Sprintf("%s\n", response))
