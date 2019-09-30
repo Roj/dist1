@@ -6,7 +6,7 @@ author:
 toc: yes
 ---
 
-## Propuesta de arquitectura 
+## Arquitectura general
 
 La propuesta completa de arquitectura se puede ver en el Apéndice 1 como
 forma de diagrama de robustez o en el Apéndice 2 como un diagrama de
@@ -22,15 +22,14 @@ consultar resultados y hacer nuevos pedidos
  + muchos análisis corriendo al mismo tiempo a servidores remotos
  + muchos datos a almacenar
 * la utilización de varias computadoras para escalar debe ser
-transparente y no debería requerir cambios en el código (i.e. solo
+transparente y no debería requerir cambios en el código (ej. solo
 por configuración)
 * persistencia de los resultados
-* debe proponer una solución *fair* que maneje el *trade-off* entre el 
-procesamiento de servidores nuevos y la paralelización de análisis 
-de servidores viejos
+* debe proponer una solución *fair* que maneje el *trade-off* entre procesar pedidos nuevos y avanzar con los que ya están en proceso
 * si bien se debe paralelizar el análisis del servidor FTP, no hay que
-agotar los recursos del servidor (i.e. cantidad de conexiones y pedidos
+agotar los recursos del servidor (cantidad de conexiones y pedidos
 simultáneos)
+
 
 La propuesta de arquitectura paraleliza el servicio de consultas al cliente
 (Daemon) con varios hilos, por lo que puede atender un buen volumen de consultas
@@ -40,11 +39,11 @@ Balancer. La idea de éste último se puede ver en el diagrama de actividades
 del Apéndice 2: para dividir los pedidos entre varios de estos grupos
 se puede usar una regla sencilla basada en la IP que se plantea analizar. Otras
 formas de balanceo pueden basarse en latencia, cantidad de
-hops o throughput de la red que conecta al grupo con el servidor FTP. Además
+*hops* o *throughput* de la red que conecta al grupo con el servidor FTP. Además
 de este balanceo entre grupos, cada uno tiene varios hilos de procesamiento
-que reciben pedidos a través de una cola. 
- 
-Por otro lado, se desacopla totalmente el manejo de la estructura de datos, 
+que reciben pedidos a través de una cola.
+
+Por otro lado, se desacopla totalmente el manejo de la estructura de datos,
 ya que corresponde a otro grupo (o contenedor) que gestiona las complejidades
 de actualización de la estructura (por su naturaleza recursiva) y la
 persistencia de la misma. De la misma manera que el contenedor de procesadores,
@@ -55,9 +54,9 @@ distintos.
 
 Estas consideraciones en el diagrama de robustez resuelven la mayoría de los
 puntos indicados al principio de la sección. Los restantes, sobre el *fairness*
-de la solución y la no-agotación de recursos de los servidores remotos, se
-pueden observar en el diagrama de actividades. En el "Worker #22" hay una pregunta
-fundamental cuando se termina de procesar un listado: ¿se puede paralelizar? Las
+de la solución y la disponibilidad de recursos de los servidores remotos, se
+pueden observar en el diagrama de actividades. En el hilo del Worker hay una pregunta
+fundamental cuando se termina de procesar un listado: si se puede paralelizar. Las
 respuestas implícitas a estas preguntas son tres: la positiva, la negativa por
 superpoblación de pedidos de ese servidor y la negativa por la abundancia de conexiones
 al servidor remoto. Por eso, también hay una cola interna que puede navegar el hilo
@@ -65,6 +64,9 @@ para aprovechar la conexión establecida. El balanceo es entonces entre la canti
 de threads que procesan al mismo tiempo y la cantidad de cosas que hace cada thread
 (anchura vs. profundidad). A nivel código luego veremos cómo se mantiene una invariante
 entre pedidos y threads corriendo.
+
+![Diagrama de actividades](Actividades.png)
+
 
 ### Ventajas y desventajas de la propuesta
 
@@ -76,7 +78,7 @@ los datos o esperando por I/O. Por ejemplo, mientras se envía la información
 a la base de datos se podría ir ya pidiendo el listado de otro directorio.
 * la pregunta de "se puede paralelizar" requiere cierta sincronización entre
 los hilos. La solucion que propusimos, que si bien no anula la desventaja
-la disminuye, es no hacer siempre la pregunta pero por nivel de directorio. 
+la minimiza, es no hacer siempre la pregunta pero por nivel de directorio.
 * si se arman muchos contenedores de trabajadores para manejar muchos
 pedidos, se puede volver un cuello de botella la base de datos
 sincronizada. Se podría pensar en un sistema de buffer local y que no sea
@@ -89,12 +91,12 @@ Como ventajas, podemos marcar la relativa simplicidad de diseño y el
 desacoplamiento entre los componentes. La escalabilidad está asegurada
 por los mecanismos de comunicación entre los componentes.
 
-## Propuesta de implementación
+## Vista de implementación
 
 La propuesta de implementación se puede ver en el Apéndice 3 como
-un diagrama de robustez reducido.  
+un diagrama de robustez reducido.
 
-### Simplificaciones realizadas 
+### Simplificaciones realizadas
 
 La implementación fundamentalmente mantiene el desacople de los
 componentes pero reduce la paralelización dentro de cada uno. Para
@@ -109,14 +111,14 @@ funcionamiento como middleware es totalmente transparente y es
 una lógica sencilla de implementar.
 
 A continuación se puede ver un diagrama sencillo de paquetes
-para entender la implementación a nivel estructuras de código:   
+para entender la implementación a nivel estructuras de código:
 
-![Diagrama de paquetes](Paquetes.png)  
+![Diagrama de despliegue](ImplementacionDespliegue.png)
 
 ### Detalles de implementación
 
 También para simplificar, y más a nivel código, se utilizó
-la siguiente heurística para el trade-off profundidad vs.
+la siguiente heurística para el *trade-off* profundidad vs.
 anchura:
 $$\mathrm{encolados}_s + \mathrm{threads}_s \leq N \ \ \ (\forall s \in \mathrm{Servidores})$$
 
@@ -135,9 +137,7 @@ dar cuenta cuándo termina. Basta pensar en un algoritmo recursivo
 que, al ser recibido un directorio hoja ($\Leftrightarrow$ no tiene
 subdirectorios) lo marque como terminado, se llame al padre
 para revisar si todos sus hijos están terminados y marcarlo en el caso
-de que sí, y así recursivamente. No es difícil de implementar pero
-introducía una lógica innecesaria para la prueba de concepto,
-además de que la simplificación no agrega overhead.
+de que sí, y así recursivamente.
 
 Finalmente, se podría pensar un lock más justo que balancee entre
 lectura y escritura según el uso de los threads. Se utilizó
