@@ -9,21 +9,14 @@ geometry: margin=2.5cm
 
 ## Arquitectura general
 
-La propuesta completa de arquitectura se puede ver en el Apéndice 1 como
-forma de diagrama de robustez o en el Apéndice 2 como un diagrama de
-actividades.
-
-![Diagrama de robustez de la arquitectura general.](Robustez.png)
-
-Elaboremos, entonces, los puntos claves que debe resolver la propuesta de
-arquitectura. Estos son:
+Los puntos claves que debe resolver la propuesta de arquitectura son:
 
 * debe haber un servicio corriendo todo el tiempo al cual se le pueda
 consultar resultados y hacer nuevos pedidos
 * escalabilidad de la arquitectura, en varios puntos:
- + manejos de muchas consultas de clientes al servicio
- + muchos análisis corriendo al mismo tiempo a servidores remotos
- + muchos datos a almacenar
+    + manejos de muchas consultas de clientes al servicio
+    + muchos análisis corriendo al mismo tiempo a servidores remotos
+    + muchos datos a almacenar
 * la utilización de varias computadoras para escalar debe ser
 transparente y no debería requerir cambios en el código (ej. solo
 por configuración)
@@ -33,13 +26,16 @@ por configuración)
 agotar los recursos del servidor (cantidad de conexiones y pedidos
 simultáneos)
 
+![Diagrama de robustez de la arquitectura general.](Robustez.png)
 
-La propuesta de arquitectura paraleliza el servicio de consultas al cliente
+
+La propuesta de arquitectura se puede ver en la Figura 1. En principio,
+paraleliza el servicio de consultas al cliente
 (Daemon) con varios hilos, por lo que puede atender un buen volumen de consultas
 tanto de análisis como de resultados. Por otro lado, se plantea un grupo
-de procesadores que son paralelizables y puestos detrás de un Load
-Balancer. La idea de éste último se puede ver en el diagrama de actividades
-del Apéndice 2: para dividir los pedidos entre varios de estos grupos
+de procesadores que son paralelizables y puestos detrás de un *Load Balancer*.
+La idea de éste último se puede ver en el diagrama de actividades
+de la Figura 2: para dividir los pedidos entre varios de estos grupos
 se puede usar una regla sencilla basada en la IP que se plantea analizar. Otras
 formas de balanceo pueden basarse en latencia, cantidad de
 *hops* o *throughput* de la red que conecta al grupo con el servidor FTP. Además
@@ -57,10 +53,23 @@ distintos.
 
 Estas consideraciones en el diagrama de robustez resuelven la mayoría de los
 puntos indicados al principio de la sección. Los restantes, sobre el *fairness*
-de la solución y la disponibilidad de recursos de los servidores remotos, se
-pueden observar en el diagrama de actividades. En el hilo del Worker hay una pregunta
-fundamental cuando se termina de procesar un listado: si se puede paralelizar. Las
-respuestas implícitas a estas preguntas son tres: la positiva, la negativa por
+de la solución y la disponibilidad de recursos de los servidores remotos.
+
+
+
+En la Figura 2 se puede ver el diagrama de actividades del procesamiento del
+pedido de un servidor. Los pasos son:
+
+1. El cliente envía un pedido al demonio. Si hay un análisis existente (en procesamiento
+o terminado), no se hace nada y se le responde al cliente. En caso contrario, se pide
+un análisis nuevo.
+2. El *load balancer* recibe un pedido y según su lógica de ruteo la distribuye a algún
+servidor de *workers*.
+3. El *worker namenode* recibe el pedido y lo agrega a la cola interna. La idea de esta
+abstracción es que los hilos *worker* no tengan que preocuparse por las conexiones TCP.
+4. El *worker thread* analiza un directorio que estaba pedido en la cola. Cuando obtiene
+los resultados y los subdirectorios, se fija si se puede paralelizar. Hay tres escenarios
+posibles: la positiva, la negativa por
 superpoblación de pedidos de ese servidor y la negativa por la abundancia de conexiones
 al servidor remoto. Por eso, también hay una cola interna que puede navegar el hilo
 para aprovechar la conexión establecida. El balanceo es entonces entre la cantidad
@@ -96,41 +105,58 @@ por los mecanismos de comunicación entre los componentes.
 
 ## Vista de implementación
 
-La propuesta de implementación se puede ver en el Apéndice 3 como
-un diagrama de robustez reducido.
+### Simplificaciones realizadas
+
+En la Figura 3 se puede ver el diagrama de robustez de la implementación.
+Se puede ver que es fundamentalmente la misma arquitectura en términos
+de desacople y distribución de los componentes. Las diferencias son tres:
+en principio, el demonio no es más un servidor multihilo. En segundo,
+no hay un *load balancer*, porque sólo se usa un grupo de *workers*. Por
+último, la base de datos se reduce a un proceso, sin tener una
+paralelización. La estrategia para estas simplificaciones es seguir
+demostrando el funcionamiento de varios patrones de arquitecturas
+distribuídas pero sin complejizar demasiado la implementación. Por ejemplo,
+la utilización de varios hilos para manejar los pedidos ya está visto en
+los *workers*, y la idea del *namenode* del servidor de almacenamiento
+es la misma que la del *worker*. Para el caso del *load balancer*, si
+bien es un patrón interesante, su
+funcionamiento como *middleware* es totalmente transparente y es
+una lógica sencilla de implementar.
 
 ![Diagrama de robustez de la implementación.](ImplementacionRobustez.png)
 
-### Simplificaciones realizadas
+### Diagrama de despliegue
 
-La implementación fundamentalmente mantiene el desacople de los
-componentes pero reduce la paralelización dentro de cada uno. Para
-la prueba de concepto naturalmente no hay muchos pedidos, por lo
-que la abstracción de tener varios hilos del demonio no es necesaria
-y es prescindible. En el caso de la base de datos es bastante
-natural la lógica de división de pedidos y similar a la de los
-workers, por lo que resultaba mayor trabajo para un patrón
-de arquitectura ya demostrado. Finalmente, no está el load balancer
-de los grupos de workers. Si bien es un patrón interesante, su
-funcionamiento como middleware es totalmente transparente y es
-una lógica sencilla de implementar.
-
-A continuación se puede ver un diagrama sencillo de paquetes
-para entender la implementación a nivel estructuras de código:
+En la Figura 4 se puede ver el diagrama de *deployment* de la aplicación.
+Esta misma se puede ver en el `docker-compose.yml`. Hay un contenedor
+para el demonio, otro para *un* servidor de procesadores y otro para el
+servidor de almacenamiento. Como agentes externos están los servidores FTP
+y el cliente, que tienen sus propios contenedores. Para el caso de los servidores
+externos armamos varias imágenes de manera de simular distintos tipos
+de tareas.
 
 ![Diagrama de despliegue](ImplementacionDespliegue.png)
 
 ### Detalles de implementación
 
-También para simplificar, y más a nivel código, se utilizó
-la siguiente heurística para el *trade-off* profundidad vs.
-anchura:
+Como se mencionó antes, es necesario definir un mecanismo justo
+para no agotar los recursos de los servidores externos y a la vez
+poder procesar pedidos nuevos. La solución implementada fue definir
+una invariante respecto de la cantidad de pedidos en la cola y cantidad
+de hilos que están procesando directorios de un mismo servidor. Esta
+heurística para el *trade-off* profundidad vs. anchura es:
+
+
 $$\mathrm{encolados}_s + \mathrm{threads}_s \leq N \ \ \ (\forall s \in \mathrm{Servidores})$$
 
-es decir, no se paraleliza si ya hay varios pedidos y/o hilos
-sobre ese servidor. Una implementación más robusta podría
+Por ejemplo, si $N=4$, para un servidor puede haber 4 hilos
+buscando directorios, o puede haber 2 hilos y 2 pedidos encolados, etc.
+Esto limita la cantidad máxima de conexiones FTP efectivamente a 4, a la
+vez que imposibilita llenar la cola de pedidos con directorios de ese
+servidor. Una implementación más robusta podría
 hacer que $N$ dependa del servidor (hay servidores que
-aceptan más conexiones), o podría usar una cola de prioridades
+aceptan más conexiones y redes que aceptan más *throughput*),
+o podría usar una cola de prioridades
 y permitir más encolamientos sin que vaya en detrimento
 de los hilos.
 
@@ -144,8 +170,40 @@ subdirectorios) lo marque como terminado, se llame al padre
 para revisar si todos sus hijos están terminados y marcarlo en el caso
 de que sí, y así recursivamente.
 
+Nuevamente hay una heurística para cuándo persistir los análisis. Se
+optó por persistir los análisis cada $1GB$ guardado, o cuando se
+terminara el procesamiento. La persistencia se hace en un hilo separado
+por lo que no se bloquea el atendimiento de los pedidos; cada
+servidor se guarda en archivos separados y hay un lock en la persistencia
+de cada servidor (no hay dos hilos que persistan a la vez el mismo servidor).
+
 Finalmente, se podría pensar un lock más justo que balancee entre
 lectura y escritura según el uso de los threads. Se utilizó
 el `sync.Mutex` estándar de golang y es probable que no sea el más preciso
 para este caso. Puede ser necesario perfilar un poco el procesamiento
 para entender cuáles operaciones son las más comunes.
+
+### Estructura del código
+
+En la Figura 5 se puede ver un diagrama de paquetes del código. Se dividió
+al programa en paquetes de `golang` intentando desacoplar los componentes
+por medio de interfaces.
+
+El paquete `storage` hace referencia a lo relacionado con la estructura
+de datos, el almacenamiento y manejo de peticiones relacionadas a ello.
+`model` contiene los tipos de datos necesarias para representar
+a los directorios y archivos, `transfer` contiene los tipos y funciones
+para poder comunicarse con el servidor. `controller` implementa la
+funcionalidad necesaria para levantar un servidor de almacenamiento.
+
+El paquete `worker` refiere a los procesadores del análisis. `ftp` se
+encarga de armar conexiones FTP y mandar y recibir datos, `parser` procesa
+la salida de comandos `ls`, `worker` representa el flujo de un hilo
+procesador y `nameserver` el flujo de un gestor de hilos que recibe
+peticiones y las despacha.
+
+El `daemon` es bastante sencillo, puesto que solo requiere mandar pedidos
+al *worker nameserver* y al *storage server*.
+
+
+![Diagrama de paquetes de la implementación.](paquetes.png)
