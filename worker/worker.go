@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"bufio"
@@ -9,8 +9,6 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-	"encoding/json"
-	"strconv"
 	"../storage"
 )
 // Para manejar los recursos que utiliza el analisis de
@@ -25,7 +23,6 @@ type ServerResources struct {
 type ServerResourcesMap map[string]*ServerResources
 
 const MAXTHREADSANDQUEUED = 3
-const DBHOSTPORT = "db:11000"
 
 // Inicia los recursos para un servidor FTP si no estaba ya disponible
 // Poscondicion: existe en el mapa la key host, hay al menos un task
@@ -41,195 +38,7 @@ func send(conn net.Conn, s string) {
 	//fmt.Printf(">%s", s)
 	conn.Write([]byte(s))
 }
-func filter_strlist(list []string, toskip string) []string {
-	var filtered []string
-	for _, name := range list {
-		if name != toskip {
-			filtered = append(filtered, name)
-		}
-	}
-	return filtered
-}
-func filter_spaces(list []string) []string {
-	return filter_strlist(list, "")
-}
 
-func parse_ls_line(line string) (string, storage.Node) {
-	//fmt.Printf("parse_ls_line: %s\n", line)
-	var node storage.Node
-	node.Size, _ = strconv.Atoi(filter_spaces(strings.Split(line, " "))[4])
-	if line[0] == 'd' {
-		node.Type = storage.Dir
-	} else if line[0] == 'l' {
-		node.Type = storage.Link
-	} else {
-		node.Type = storage.File
-	}
-	node.Files = make(storage.NodeMap)
-	parts := filter_spaces(strings.Split(line, " ") )
-	name := parts[len(parts)-1]
-	return name, node
-}
-
-// Inicia la conexión de control al host destino en puerto 21
-// e inicia la escucha en un puerto indicado para la conexion de datos.
-// Devuelve la conexión de control, el buffer de control y el escuchante
-// en el puerto aleatorio.
-// TODO: credenciales
-func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener) {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), time.Second)
-	if err != nil {
-		fmt.Println(err)
-		fmt.Println("Waiting one second and trying again..")
-		time.Sleep(time.Second)
-		return setup_ftp(host, port)
-		os.Exit(1)
-	}
-	lhost, lport, _ := net.SplitHostPort(conn.LocalAddr().String())
-	fmt.Printf("Local address is is %s:%s\n", lhost, lport)
-	connbuf := bufio.NewReader(conn)
-	for {
-		str, _ := connbuf.ReadString('\n')
-		if strings.Contains(str, "220") {
-			break
-		}
-	}
-	dataserver, err := net.Listen("tcp", fmt.Sprintf(":%d",port))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	//time.Sleep(2*time.Second)
-	send(conn, "USER anonymous\r\n")
-	send(conn, "SYST\r\n")
-	for {
-		str, err := connbuf.ReadString('\n')
-		/*if len(str) > 0 {
-			fmt.Printf("<%s", str)
-		}*/
-		if err != nil {
-			fmt.Printf("Error: %s", err)
-			os.Exit(1)
-		}
-		if strings.Contains(str, "230") {
-			break
-		}
-	}
-
-	return conn, connbuf, dataserver
-}
-
-// Envía el comando cmd (no es necesario el \n) por la conexión de
-// control conn, indicando que mande los datos al puerto port.
-// Espera a que el servidor indique que se transfirieron los datos.
-func send_command(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
-	first_octet := port/256
-	second_octet := port - first_octet*256
-	//TODO: ver si tira error, reintentar, backoff, agregar al queue-socket.
-	//TODO IP
-	send(conn, fmt.Sprintf("PORT 127,0,0,1,%d,%d\r\n", first_octet, second_octet))
-	for {
-		str, err := connbuf.ReadString('\n')
-		/*if len(str) > 0 {
-			fmt.Printf("<%s", str)
-		}*/
-		if err != nil {
-			fmt.Printf("Error: %s", err)
-			return
-		}
-		if strings.Contains(str, "200") {
-			break
-		}
-	}
-	send(conn, fmt.Sprintf("%s\r\n", cmd))
-	//Now we wait until the command is complete (226)
-	for {
-		str, _ := connbuf.ReadString('\n')
-		/*if len(str) > 0 {
-			fmt.Printf("<%s", str)
-		}*/
-		if strings.Contains(str, "226") {
-			break;
-		}
-		if strings.Contains(str, "425") {
-			fmt.Printf("Could not build data connection, retrying in one second.\n")
-			time.Sleep(time.Second)
-			send_command(cmd, conn, connbuf, port)
-			return
-		}
-	}
-}
-
-// Procesa los resultados de un ls que recibio el escuchante.
-// Partiendo desde path, agrega los nodos nuevos
-// al árbol que arranca en root_dir y encola los directorios a procesar en
-// queue.
-func parse_ls(path string, dataserver net.Listener) (storage.Node, []string) {
-	node := storage.Node{storage.Dir, 0, path, make(storage.NodeMap)}
-	queue := make([]string, 0)
-	dconn, err := dataserver.Accept()
-	if err != nil {
-		// handle error
-	}
-	dconnbuf := bufio.NewScanner(dconn)
-	i := 0
-	for dconnbuf.Scan() {
-		i = i +1
-		if i == 1 {
-			continue
-		}
-		_str, _node := parse_ls_line(dconnbuf.Text())
-		_node.Path = fmt.Sprintf("%s%s/",path,_str)  //TODO if not dir do not add /
-
-		node.Files[_str] = &_node
-		node.Size += _node.Size
-
-		if _node.Type == storage.Dir {
-			//fmt.Printf("Encolamos %s\n", _node.Path)
-			queue = append(queue, _node.Path)
-		}
-		//fmt.Printf("Path=%s, _str = %s, node = %q\n", path, _str, _node)
-		//fmt.Println(_node.nodetype, _str, _node.size)
-
-
-	}
-	return node, queue
-}
-func send_command_db(query storage.Query) {
-	bytejson, err := json.Marshal(query)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	conn, err := net.Dial("tcp", DBHOSTPORT)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-	for _, _ = range []int{1} {
-		send(conn, fmt.Sprintf("%s\n", bytejson))
-	}
-	connbuf := bufio.NewReader(conn)
-	for {
-		str, _ := connbuf.ReadString('\n')
-		if str == "OK\n" {
-			break
-		} else {
-			fmt.Println("Unknown message ", str)
-		}
-	}
-}
-func update_db(host string, node storage.Node) {
-	query := storage.Query{storage.Write, host, node}
-	send_command_db(query)
-}
-func finish_job_db(host string) {
-	fmt.Println("Job finished for host ", host)
-	var _node storage.Node
-	query := storage.Query{storage.Finishserver, host, _node}
-	send_command_db(query)
-}
 func register_thread(host string, dict ServerResourcesMap) {
 	init_serverresources(host, dict)
 	hostres := dict[host]
@@ -246,7 +55,7 @@ func unregister_thread(host string, dict ServerResourcesMap) {
 	hostres.nthreads = hostres.nthreads - 1
 	fmt.Printf("[THREAD] Unregistering thread - tasks %d threads %d\n", hostres.nqueued, hostres.nthreads)
 	if hostres.nqueued == 0 && hostres.nthreads == 0 {
-		finish_job_db(host)
+		storage.FinishJob(host)
 	}
 	hostres.lock.Unlock()
 }
@@ -277,7 +86,7 @@ func run_analysis(host string, path string, idworker int, resourcesmap ServerRes
 		queue = queue[1:]
 		send_command(fmt.Sprintf("LIST -AQ %s", cpath), conn, connbuf, port)
 		node, new_queue := parse_ls(cpath, dataserver)
-		update_db(host, node)
+		storage.UpdateNode(host, node)
 
 		// Skip /proc/ because it doesn't make sense and causes special errors
 		queue = filter_strlist(append(queue, new_queue...), "/proc/")
@@ -315,7 +124,7 @@ func also_process(msg string) {
 	//fmt.Println("Cerrando alsoprocess")
 }
 
-func worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap ServerResourcesMap) {
+func Worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap ServerResourcesMap) {
 	rand.Seed(time.Now().UnixNano()+int64(i)*27)
 	defer wg.Done()
 	fmt.Println("Started worker ", i)
@@ -332,30 +141,12 @@ func worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap Server
 		fmt.Printf("[THREAD %d] Finalizado trabajo\n", i, host, path)
 	}
 }
-func main() {
-	//Set up nameserver
-	nameserver, err := net.Listen("tcp", ":50000")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	fmt.Printf("Listening on port 50000")
-
-	//Set up workers
-	resourcesmap := make(ServerResourcesMap)
-	lCh := make(chan string, 10000)
-	wg := new(sync.WaitGroup)
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go worker(i, lCh, wg, resourcesmap)
-	}
-
-	//Process requests
+func ProcessRequests(ns net.Listener, lCh chan string) {
 	j := 0
 	for {
 		fmt.Println("Recibida conexion nueva #", j)
 		j = j + 1
-		conn, err := nameserver.Accept()
+		conn, err := ns.Accept()
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -364,9 +155,16 @@ func main() {
 		msg, _ := bufio.NewReader(conn).ReadString('\n')
 		lCh <- msg[:len(msg)-1] //remove trailing \n
 		conn.Close()
-
 	}
-	fmt.Println("Oops?")
-	close(lCh)
-	wg.Wait()
+}
+func NameServer(lCh chan string) net.Listener {
+	//Set up nameserver
+	ns, err := net.Listen("tcp", ":50000")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Printf("Listening on port 50000")
+
+	return ns
 }

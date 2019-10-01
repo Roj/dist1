@@ -75,3 +75,20 @@ func Shallow_copy(n Node) Node {
 	}
 	return shallow
 }
+
+func Get_dir(dict ServerMap, host string, path string) ResultsResponse {
+	var response ResultsResponse
+	if server, ok := dict[host]; ok {
+		response.Finished = server.Finished
+		response.Node = Node{File, 0, "/", make(NodeMap)}
+		if server.Finished {
+			node := Get_subdir(path, server.Root_dir)
+			shallow_node := Shallow_copy(*node)
+			response.Node = shallow_node
+		}
+	} else {
+		response.Finished = false
+		response.Node = Node{File, -1, "/", make(NodeMap)}
+	}
+	return response
+}
