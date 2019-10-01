@@ -8,8 +8,16 @@ import (
 )
 
 func send(conn net.Conn, s string) {
-	fmt.Printf("Sending: %s\n", s)
-	conn.Write([]byte(s))
+	fmt.Printf(">%s\n", s)
+	buf := []byte(s)
+	count := 0
+	for count < len(buf) {
+		byteSent, err := conn.Write(buf[count:])
+		count += byteSent
+		if err == nil {
+			return
+		}
+	}
 }
 
 func main() {

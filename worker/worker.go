@@ -34,8 +34,16 @@ func initServerResources(host string, dict ServerResourcesMap) {
 
 // Wrap sencillo de write para poder imprimir e ir viendo.
 func send(conn net.Conn, s string) {
-	//fmt.Printf(">%s", s)
-	conn.Write([]byte(s))
+	//fmt.Printf(">%s\n", s)
+	buf := []byte(s)
+	count := 0
+	for count < len(buf) {
+		byteSent, err := conn.Write(buf[count:])
+		count += byteSent
+		if err == nil {
+			return
+		}
+	}
 }
 
 func registerThread(host string, dict ServerResourcesMap) {

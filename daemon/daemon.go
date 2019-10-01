@@ -13,7 +13,15 @@ const DBHOSTPORT = "db:11000"
 const WORKERHOSTPORT = "worker:50000"
 func send(conn net.Conn, s string) {
 	fmt.Printf(">%s\n", s)
-	conn.Write([]byte(s))
+	buf := []byte(s)
+	count := 0
+	for count < len(buf) {
+		byteSent, err := conn.Write(buf[count:])
+		count += byteSent
+		if err == nil {
+			return
+		}
+	}
 }
 
 // Initializes the DB structure for server host
