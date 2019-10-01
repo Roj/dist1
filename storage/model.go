@@ -31,7 +31,9 @@ func Str_nodetype(node Node) string {
 		return "file"
 	}
 }
-func Get_subdir(path string, root_dir *Node) *Node {
+// Devuelve el nodo del subdirectorio pedido. El segundo
+// elemento es true si hubo exito, o false si no se encontro.
+func Get_subdir(path string, root_dir *Node) (*Node, bool) {
 	steps := strings.Split(path, "/")
 	node := root_dir
 	for _, subdir := range steps {
@@ -39,9 +41,13 @@ func Get_subdir(path string, root_dir *Node) *Node {
 			continue
 		}
 
-		node = node.Files[subdir]
+		_node, ok := node.Files[subdir]
+		if ! ok {
+			return nil, false
+		}
+		node = _node
 	}
-	return node
+	return node, true
 }
 
 func update_parents_size(path string, root_dir *Node, size int) {
@@ -60,7 +66,7 @@ func update_parents_size(path string, root_dir *Node, size int) {
 func Add_dir(dict ServerMap, server string, node Node) {
 
 	// It always exists
-	dbnode := Get_subdir(node.Path, dict[server].Root_dir)
+	dbnode, _ := Get_subdir(node.Path, dict[server].Root_dir)
 	/*encoded, _ := json.Marshal(node)
 	fmt.Printf("add_dir a escribir: %s\n", encoded)
 	encoded, _ = json.Marshal(node)
@@ -81,11 +87,12 @@ func Get_dir(dict ServerMap, host string, path string) ResultsResponse {
 	if server, ok := dict[host]; ok {
 		response.Finished = server.Finished
 		response.Node = Node{File, 0, "/", make(NodeMap)}
-		if server.Finished {
-			node := Get_subdir(path, server.Root_dir)
+		node, exists := Get_subdir(path, server.Root_dir)
+		if exists {
 			shallow_node := Shallow_copy(*node)
 			response.Node = shallow_node
 		}
+
 	} else {
 		response.Finished = false
 		response.Node = Node{File, -1, "/", make(NodeMap)}

@@ -81,12 +81,12 @@ func getresult(path string, host string) string {
 	if err != nil {
 		fmt.Printf("Error decoding:%s", err)
 	}
-	if response.Finished {
-		str := pretty_print_results(response.Node)
-		fmt.Println("Lo que armo pretty print:", str)
-		return str
+	str = pretty_print_results(response.Node)
+	fmt.Println("Lo que armo pretty print:", str)
+	if ! response.Finished {
+		return fmt.Sprintf("El host %s no tiene un analisis terminado. El resultado parcial es: \n %s", host, str)
 	}
-	return fmt.Sprintf("El host %s no tiene un analisis terminado.", host)
+	return str
 }
 
 func process_request(command string) string {
