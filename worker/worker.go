@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -74,9 +73,18 @@ func distribute_jobs(queue []string, host string, hostres *ServerResources) []st
 }
 func run_analysis(host string, path string, idworker int, resourcesmap ServerResourcesMap) {
 	register_thread(host, resourcesmap)
+	defer unregister_thread(host, resourcesmap)
 	hostres := resourcesmap[host]
 	port := 9100 + idworker
-	conn, connbuf, dataserver := setup_ftp(host, port)
+	conn, connbuf, dataserver, e := setup_ftp(host, port)
+	if e == timeoutError {
+		// Volvemos a agregar a la cola.
+		hostres.lock.Lock()
+		hostres.nqueued = hostres.nqueued + 1
+		also_process(fmt.Sprintf("%s %s\n", host, path))
+		hostres.lock.Unlock()
+		return
+	}
 
 	it := 0
 	next_thread_check := 0
@@ -88,7 +96,7 @@ func run_analysis(host string, path string, idworker int, resourcesmap ServerRes
 		node, new_queue := parse_ls(cpath, dataserver)
 		storage.UpdateNode(host, node)
 
-		// Skip /proc/ because it doesn't make sense and causes special errors
+		// Skip /proc/ and /sys/ because they don't make sense and can cause special errors
 		queue = filter_strlist(append(queue, new_queue...), "/proc/")
 		queue = filter_strlist(append(queue, new_queue...), "/sys/")
 		//fmt.Printf("Adjusted queue is %s\n", queue)
@@ -104,7 +112,6 @@ func run_analysis(host string, path string, idworker int, resourcesmap ServerRes
 	send(conn, "BYE\r\n")
 	conn.Close()
 	dataserver.Close()
-	unregister_thread(host, resourcesmap)
 }
 func also_process(msg string) {
 	//fmt.Printf("Also process.. -- '%s'", msg)
@@ -140,31 +147,4 @@ func Worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap Server
 		run_analysis(host, path, i, resourcesmap)
 		fmt.Printf("[THREAD %d] Finalizado trabajo\n", i, host, path)
 	}
-}
-func ProcessRequests(ns net.Listener, lCh chan string) {
-	j := 0
-	for {
-		fmt.Println("Recibida conexion nueva #", j)
-		j = j + 1
-		conn, err := ns.Accept()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		msg, _ := bufio.NewReader(conn).ReadString('\n')
-		lCh <- msg[:len(msg)-1] //remove trailing \n
-		conn.Close()
-	}
-}
-func NameServer(lCh chan string) net.Listener {
-	//Set up nameserver
-	ns, err := net.Listen("tcp", ":50000")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	fmt.Printf("Listening on port 50000")
-
-	return ns
 }

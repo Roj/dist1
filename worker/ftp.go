@@ -7,19 +7,20 @@ import (
 	"strings"
 	"time"
 )
+const (
+	noError = iota
+	timeoutError
+)
 // Inicia la conexión de control al host destino en puerto 21
 // e inicia la escucha en un puerto indicado para la conexion de datos.
 // Devuelve la conexión de control, el buffer de control y el escuchante
 // en el puerto aleatorio.
 // TODO: credenciales
-func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener) {
+func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int)  {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), time.Second)
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("Waiting one second and trying again..")
-		time.Sleep(time.Second)
-		return setup_ftp(host, port)
-		os.Exit(1)
+		return nil, nil, nil, timeoutError
 	}
 	lhost, lport, _ := net.SplitHostPort(conn.LocalAddr().String())
 	fmt.Printf("Local address is is %s:%s\n", lhost, lport)
@@ -52,7 +53,7 @@ func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener) {
 		}
 	}
 
-	return conn, connbuf, dataserver
+	return conn, connbuf, dataserver, noError
 }
 
 // Envía el comando cmd (no es necesario el \n) por la conexión de

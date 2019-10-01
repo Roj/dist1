@@ -5,11 +5,28 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"sync"
+	"io/ioutil"
 )
-
+type persistence_resources struct {
+	lock *sync.Mutex
+	persisted_size int
+}
+type persistence_resources_map map[string]*persistence_resources
+func persist_server(servermap ServerMap, presmap persistence_resources_map, host string) {
+	resources := presmap[host]
+	resources.lock.Lock()
+	defer resources.lock.Unlock()
+	encoded, _ := json.Marshal(servermap[host].Root_dir)
+	err := ioutil.WriteFile(host, encoded, 0644)
+	if err != nil {
+		panic(err)
+	}
+	resources.persisted_size = servermap[host].Root_dir.Size
+}
 // Process a given query and produces a response to be sent to the
 // client (without \n)
-func process_query(query Query, servermap ServerMap) string {
+func process_query(query Query, servermap ServerMap, presmap persistence_resources_map) string {
 	//TODO: queryResponse
 	//fmt.Printf("El nodo recibido es el de path %s\n", query.Node.Path)
 	switch query.Type {
@@ -21,16 +38,21 @@ func process_query(query Query, servermap ServerMap) string {
 	case Write:
 		fmt.Printf("Es una escritura del host %s sobre el directorio %s\n", query.Hostname, query.Node.Path)
 		Add_dir(servermap, query.Hostname, query.Node)
+		if servermap[query.Hostname].Root_dir.Size > presmap[query.Hostname].persisted_size {
+			persist_server(servermap, presmap, query.Hostname)
+		}
 	case Newserver:
 		if _, ok := servermap[query.Hostname]; ok {
 			return "ALREADYEXISTS"
 		}
 		servermap[query.Hostname] = &Server{
 			query.Hostname, false, &Node{Dir, 0, "/", make(NodeMap)}}
+		presmap[query.Hostname] = &persistence_resources{&sync.Mutex{}, 0}
 
 	case Finishserver:
 		fmt.Printf("Terminando server %s\n", query.Hostname)
 		servermap[query.Hostname].Finished = true
+		persist_server(servermap, presmap, query.Hostname)
 	}
 	//encoded, _ := json.Marshal(servermap[query.Hostname].root_dir)
 	//fmt.Printf("Ahora el servidor queda como: %s\n", encoded)
@@ -49,6 +71,7 @@ func StartServer() net.Listener {
 }
 func ProcessRequests(dblisten net.Listener) {
 	servermap := make(ServerMap)
+	presmap := make(persistence_resources_map)
 	for {
 		//fmt.Println("Esperando conexion..")
 		conn, err := dblisten.Accept()
@@ -69,7 +92,7 @@ func ProcessRequests(dblisten net.Listener) {
 		// Unserialize message
 		var query Query
 		err = json.Unmarshal([]byte(msg), &query)
-		response := process_query(query, servermap)
+		response := process_query(query, servermap, presmap)
 		send(conn, fmt.Sprintf("%s\n", response))
 		conn.Close()
 	}

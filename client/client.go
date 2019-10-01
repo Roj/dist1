@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
-	"bufio"
 )
 
 func send(conn net.Conn, s string) {
@@ -14,7 +14,7 @@ func send(conn net.Conn, s string) {
 
 func main() {
 	args := os.Args[1:]
-	conn, err := net.Dial("tcp", "127.0.0.1:11001")
+	conn, err := net.Dial("tcp", "daemon:11001")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -26,7 +26,6 @@ func main() {
 	} else {
 		fmt.Printf("No entendido: %s\n", args)
 	}
-
 
 	dconnbuf := bufio.NewScanner(conn)
 
