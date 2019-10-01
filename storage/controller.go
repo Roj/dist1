@@ -4,7 +4,6 @@ import (
 	"net"
 	"bufio"
 	"encoding/json"
-	"os"
 	"sync"
 	"io/ioutil"
 )
@@ -59,15 +58,15 @@ func processQuery(query Query, servermap ServerMap, presmap persistenceResources
 	fmt.Printf("El tamaño actual del host %s es %d\n", query.Hostname, servermap[query.Hostname].Root_dir.Size)
 	return "OK"
 }
-func StartServer() net.Listener {
+func StartServer() (net.Listener, error) {
 	//Setup listen socket
 	dblisten, err := net.Listen("tcp", ":11000")
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 	fmt.Printf("Listening on port 11000")
-	return dblisten
+	return dblisten, nil
 }
 func ProcessRequests(dblisten net.Listener) {
 	servermap := make(ServerMap)
@@ -77,23 +76,29 @@ func ProcessRequests(dblisten net.Listener) {
 		conn, err := dblisten.Accept()
 		//fmt.Println("[DB] Recibida conexion")
 		if err != nil {
-			fmt.Println("Error!!")
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Println("No se pudo aceptar la conexion: ", err)
+			continue
 		}
-		//fmt.Println("Leyendo...")
+
 		msg, err := bufio.NewReader(conn).ReadString('\n')
-		//fmt.Println("Leido!")
+
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Println("Problema leyendo mensaje:", err)
+			conn.Close()
+			continue
 		}
 		msg = msg[:len(msg)-1] //trailing \n
 		// Unserialize message
 		var query Query
+
 		err = json.Unmarshal([]byte(msg), &query)
-		response := processQuery(query, servermap, presmap)
-		send(conn, fmt.Sprintf("%s\n", response))
+		if err != nil {
+			fmt.Println("No se pudo de-serializar el mensaje: ", err)
+		} else {
+			response := processQuery(query, servermap, presmap)
+			send(conn, fmt.Sprintf("%s\n", response))
+		}
+		fmt.Println("Cerrando conexion.")
 		conn.Close()
 	}
 }

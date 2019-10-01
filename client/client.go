@@ -25,7 +25,7 @@ func main() {
 	conn, err := net.Dial("tcp", "daemon:11001")
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		panic("No se pudo conectar con el demonio")
 	}
 	if args[0] == "analyze" {
 		send(conn, fmt.Sprintf("analyze %s\n", args[1]))

@@ -3,7 +3,6 @@ package worker
 import (
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"math/rand"
 	"sync"
@@ -73,7 +72,12 @@ func distributeJobs(queue []string, host string, hostres *ServerResources) []str
 			subpath := queue[0]
 			queue = queue[1:]
 			hostres.nqueued = hostres.nqueued + 1
-			alsoProcess(fmt.Sprintf("%s %s\n", host, subpath))
+			queued := alsoProcess(fmt.Sprintf("%s %s\n", host, subpath))
+			// Si no se puede agregar a la cola general, lo seguimos procesando
+			// en este thread.
+			if !queued {
+				queue = append(queue, subpath)
+			}
 		}
 	}
 	hostres.lock.Unlock()
@@ -89,8 +93,15 @@ func runAnalysis(host string, path string, idworker int, resourcesmap ServerReso
 		// Volvemos a agregar a la cola.
 		hostres.lock.Lock()
 		hostres.nqueued = hostres.nqueued + 1
-		alsoProcess(fmt.Sprintf("%s %s\n", host, path))
+		requeue := alsoProcess(fmt.Sprintf("%s %s\n", host, path))
+		if ! requeue {
+			panic("Timeout on FTP server and Timeout on Worker queue")
+		}
 		hostres.lock.Unlock()
+		return
+	} else if e == noListener {
+		// El problema es el address. Intentamos con otro
+		runAnalysis(host, path, idworker + 1000, resourcesmap)
 		return
 	}
 
@@ -121,21 +132,24 @@ func runAnalysis(host string, path string, idworker int, resourcesmap ServerReso
 	conn.Close()
 	dataserver.Close()
 }
-func alsoProcess(msg string) {
+// Adds a job to this worker server's general queue.
+// In case of timeout it tries once more.
+// Returns false on error.
+func alsoProcess(msg string) bool {
 	//fmt.Printf("Also process.. -- '%s'", msg)
 	conn, err := net.DialTimeout("tcp", ":50000", time.Second)
-	defer conn.Close()
 	if err != nil {
-		fmt.Println(err)
-
-		fmt.Printf("Maybe timed out... trying again")
-		alsoProcess(msg)
-		return
-		//TODO
-
-		os.Exit(1)
+		if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+			fmt.Printf("Timed out: waiting one second and trying again")
+			time.Sleep(time.Second)
+			conn, err = net.DialTimeout("tcp", ":50000", time.Second)
+			return err != nil
+		}
+		return false
 	}
+	defer conn.Close()
 	send(conn, msg)
+	return true
 	//fmt.Println("Cerrando alsoprocess")
 }
 

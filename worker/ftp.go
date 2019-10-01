@@ -3,13 +3,13 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 )
 const (
 	noError = iota
 	timeoutError
+	noListener
 )
 // Inicia la conexión de control al host destino en puerto 21
 // e inicia la escucha en un puerto indicado para la conexion de datos.
@@ -33,8 +33,9 @@ func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int
 	}
 	dataserver, err := net.Listen("tcp", fmt.Sprintf(":%d",port))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fmt.Println("No se pudo levantar la conexion de datos:", err)
+		conn.Close()
+		return nil, nil, nil, noListener
 	}
 	//time.Sleep(2*time.Second)
 	send(conn, "USER anonymous\r\n")
@@ -46,7 +47,7 @@ func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int
 		}*/
 		if err != nil {
 			fmt.Printf("Error: %s", err)
-			os.Exit(1)
+			continue
 		}
 		if strings.Contains(str, "230") {
 			break

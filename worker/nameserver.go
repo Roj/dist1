@@ -3,17 +3,17 @@ import (
 	"net"
 	"fmt"
 	"bufio"
-	"os"
 )
 func ProcessRequests(ns net.Listener, lCh chan string) {
 	j := 0
 	for {
-		fmt.Println("Recibida conexion nueva #", j)
 		j = j + 1
 		conn, err := ns.Accept()
+		fmt.Println("Recibida conexion nueva #", j)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Println("No se pudo aceptar la conexion: ", err)
+			fmt.Println("Ignorando..")
+			continue
 		}
 
 		msg, _ := bufio.NewReader(conn).ReadString('\n')
@@ -21,14 +21,14 @@ func ProcessRequests(ns net.Listener, lCh chan string) {
 		conn.Close()
 	}
 }
-func NameServer(lCh chan string) net.Listener {
+func NameServer(lCh chan string) (net.Listener, error) {
 	//Set up nameserver
 	ns, err := net.Listen("tcp", ":50000")
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 	fmt.Printf("Listening on port 50000")
 
-	return ns
+	return ns, nil
 }

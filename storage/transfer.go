@@ -3,9 +3,9 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"net"
 	"bufio"
+	"time"
 )
 const (
 	Read = iota
@@ -37,31 +37,45 @@ func send(conn net.Conn, s string) {
 		}
 	}
 }
-func SendQuery(query Query) string {
+// Manda una query al servidor de storage.
+// Devuelve la respuesta, y si falló la transmisión o no.
+// La transmisión puede ser reintentable.
+func SendQuery(query Query) (string, bool) {
 	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return "", false
 	}
 	defer conn.Close()
 
 	bytejson, err := json.Marshal(query)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fmt.Println("Error de serializacion:", err)
+		//De este error no se puede recuperar (query malformada)
+		panic("Query no valida")
 	}
 
 	send(conn, fmt.Sprintf("%s\n", bytejson))
 	connbuf := bufio.NewReader(conn)
-	str, _ := connbuf.ReadString('\n')
+	str, e := connbuf.ReadString('\n')
+	if e != nil {
+		return "", false
+	}
 	fmt.Printf("Recibido de la DB -- %s --\n",str)
-	return str
+	return str, true
 }
+// Manda un comando al servidor de storage.
+// Si hay error de TCP, reintenta en un segundo.
+// Espera hasta el OK del servidor.
 func sendCommand(query Query) {
-	str := SendQuery(query)
+	str, success := SendQuery(query)
+	for !success {
+		time.Sleep(time.Second)
+		str, success = SendQuery(query)
+	}
+
 	if str != "OK\n" {
 		fmt.Println("Unknown message ", str)
-		//TODO: error
 	}
 }
 func UpdateNode(host string, node Node) {

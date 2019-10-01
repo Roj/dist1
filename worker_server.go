@@ -13,7 +13,10 @@ func main() {
 		go worker.Worker(i, lCh, wg, resourcesmap)
 	}
 
-	ns := worker.NameServer(lCh)
+	ns, err := worker.NameServer(lCh)
+	if err != nil {
+		panic("No se pudo levantar el NameServer")
+	}
 	worker.ProcessRequests(ns, lCh)
 
 	close(lCh)
