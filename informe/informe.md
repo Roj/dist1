@@ -4,6 +4,7 @@ subtitle: Sistemas Distribuidos 1
 author:
 - Joaquin Torre Zaffaroni (98314)
 toc: yes
+geometry: margin=2.5cm
 ---
 
 ## Arquitectura general
@@ -11,6 +12,8 @@ toc: yes
 La propuesta completa de arquitectura se puede ver en el Apéndice 1 como
 forma de diagrama de robustez o en el Apéndice 2 como un diagrama de
 actividades.
+
+![Diagrama de robustez de la arquitectura general.](Robustez.png)
 
 Elaboremos, entonces, los puntos claves que debe resolver la propuesta de
 arquitectura. Estos son:
@@ -95,6 +98,8 @@ por los mecanismos de comunicación entre los componentes.
 
 La propuesta de implementación se puede ver en el Apéndice 3 como
 un diagrama de robustez reducido.
+
+![Diagrama de robustez de la implementación.](ImplementacionRobustez.png)
 
 ### Simplificaciones realizadas
 
