@@ -29,29 +29,31 @@ func send(conn net.Conn, s string) {
 	//fmt.Printf(">%s", s)
 	conn.Write([]byte(s))
 }
-func sendCommand(query Query) {
-	bytejson, err := json.Marshal(query)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+func SendQuery(query Query) string {
 	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	defer conn.Close()
-	for _, _ = range []int{1} {
-		send(conn, fmt.Sprintf("%s\n", bytejson))
+
+	bytejson, err := json.Marshal(query)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
+
+	send(conn, fmt.Sprintf("%s\n", bytejson))
 	connbuf := bufio.NewReader(conn)
-	for {
-		str, _ := connbuf.ReadString('\n')
-		if str == "OK\n" {
-			break
-		} else {
-			fmt.Println("Unknown message ", str)
-		}
+	str, _ := connbuf.ReadString('\n')
+	fmt.Printf("Recibido de la DB -- %s --\n",str)
+	return str
+}
+func sendCommand(query Query) {
+	str := SendQuery(query)
+	if str != "OK\n" {
+		fmt.Println("Unknown message ", str)
+		//TODO: error
 	}
 }
 func UpdateNode(host string, node Node) {

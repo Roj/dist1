@@ -16,7 +16,7 @@ const (
 // Devuelve la conexión de control, el buffer de control y el escuchante
 // en el puerto aleatorio.
 // TODO: credenciales
-func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int)  {
+func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int)  {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), time.Second)
 	if err != nil {
 		fmt.Println(err)
@@ -59,7 +59,7 @@ func setup_ftp(host string, port int) (net.Conn, *bufio.Reader, net.Listener, in
 // Envía el comando cmd (no es necesario el \n) por la conexión de
 // control conn, indicando que mande los datos al puerto port.
 // Espera a que el servidor indique que se transfirieron los datos.
-func send_command(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
+func sendFTPCommand(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
 	first_octet := port/256
 	second_octet := port - first_octet*256
 	//TODO: ver si tira error, reintentar, backoff, agregar al queue-socket.
@@ -91,7 +91,7 @@ func send_command(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
 		if strings.Contains(str, "425") {
 			fmt.Printf("Could not build data connection, retrying in one second.\n")
 			time.Sleep(time.Second)
-			send_command(cmd, conn, connbuf, port)
+			sendFTPCommand(cmd, conn, connbuf, port)
 			return
 		}
 	}

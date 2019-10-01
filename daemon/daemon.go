@@ -15,32 +15,14 @@ func send(conn net.Conn, s string) {
 	fmt.Printf(">%s\n", s)
 	conn.Write([]byte(s))
 }
-func send_query_db(query storage.Query) string {
-	conn, err := net.Dial("tcp", DBHOSTPORT)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 
-	bytejson, err := json.Marshal(query)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	send(conn, fmt.Sprintf("%s\n", bytejson))
-	connbuf := bufio.NewReader(conn)
-	str, _ := connbuf.ReadString('\n')
-	fmt.Printf("Recibido de la DB -- %s --\n",str)
-	return str
-}
 // Initializes the DB structure for server host
 // if it did not exist. Returns true if server
 // was created, false if it already existed.
-func create_db_analysis(host string) bool {
+func createDBAnalysis(host string) bool {
 	node := storage.Node{storage.Dir, 0, "/", make(storage.NodeMap)}
 	query := storage.Query{storage.Newserver, host, node}
-	str := send_query_db(query)
+	str := storage.SendQuery(query)
 	if str == "OK\n" {
 		return true
 	} else if str == "ALREADYEXISTS\n" {
@@ -49,39 +31,39 @@ func create_db_analysis(host string) bool {
 	fmt.Println("Unknown message ", str)
 	return false
 }
-func runanalysis(host string) string {
+func runAnalysis(host string) string {
 	conn, err := net.Dial("tcp", WORKERHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if !create_db_analysis(host) {
+	if !createDBAnalysis(host) {
 		return fmt.Sprintf("Ya hay un pedido de analisis para el host %s", host)
 	}
 
 	send(conn, fmt.Sprintf("%s /\n", host))
 	return "OK"
 }
-func pretty_print_results(node storage.Node) string {
+func prettyPrintResults(node storage.Node) string {
 	str := ""
 	str = str + fmt.Sprintf("%s (%d bytes)\n", node.Path, node.Size)
 	for k, v := range node.Files {
-		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, storage.Str_nodetype(*v), v.Size)
+		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, storage.StrNodeType(*v), v.Size)
 	}
 	return str
 
 }
-func getresult(path string, host string) string {
+func getResult(path string, host string) string {
 	fmt.Println("Armando resultados")
 	node := storage.Node{storage.Dir, 0, path +"/", make(storage.NodeMap)}
 	query := storage.Query{storage.Read, host, node}
-	str := send_query_db(query)
+	str := storage.SendQuery(query)
 	var response storage.ResultsResponse
 	err := json.Unmarshal([]byte(str), &response)
 	if err != nil {
 		fmt.Printf("Error decoding:%s", err)
 	}
-	str = pretty_print_results(response.Node)
+	str = prettyPrintResults(response.Node)
 	fmt.Println("Lo que armo pretty print:", str)
 	if ! response.Finished {
 		return fmt.Sprintf("El host %s no tiene un analisis terminado. El resultado parcial es: \n %s", host, str)
@@ -89,17 +71,17 @@ func getresult(path string, host string) string {
 	return str
 }
 
-func process_request(command string) string {
-	//TODO: analyze results..
+func processRequest(command string) string {
+	fmt.Println("Recibido: %s\n", command)
 	if strings.Contains(command, "analyze") {
 		host := ""
 		fmt.Sscanf(command, "analyze %s", &host)
-		return runanalysis(host) + "\n"
+		return runAnalysis(host) + "\n"
 	} else if strings.Contains(command, "summary") {
 		host := ""
 		path := ""
 		fmt.Sscanf(command, "summary %s %s", &host, &path)
-		return getresult(path, host) + "\n"
+		return getResult(path, host) + "\n"
 	}
 	return fmt.Sprintf("Unknown command received: %s", command)
 }
@@ -118,7 +100,7 @@ func main() {
 		}
 		buf := bufio.NewScanner(conn)
 		for buf.Scan() {
-			send(conn, process_request(buf.Text()) + "\n")
+			send(conn, processRequest(buf.Text()) + "\n")
 
 		}
 		conn.Close()

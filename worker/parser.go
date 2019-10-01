@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func filter_strlist(list []string, toskip string) []string {
+func filterStrlist(list []string, toskip string) []string {
 	var filtered []string
 	for _, name := range list {
 		if name != toskip {
@@ -17,14 +17,14 @@ func filter_strlist(list []string, toskip string) []string {
 	}
 	return filtered
 }
-func filter_spaces(list []string) []string {
-	return filter_strlist(list, "")
+func filterSpaces(list []string) []string {
+	return filterStrlist(list, "")
 }
 
-func parse_ls_line(line string) (string, storage.Node) {
+func parseLSLine(line string) (string, storage.Node) {
 	//fmt.Printf("parse_ls_line: %s\n", line)
 	var node storage.Node
-	node.Size, _ = strconv.Atoi(filter_spaces(strings.Split(line, " "))[4])
+	node.Size, _ = strconv.Atoi(filterSpaces(strings.Split(line, " "))[4])
 	if line[0] == 'd' {
 		node.Type = storage.Dir
 	} else if line[0] == 'l' {
@@ -33,7 +33,7 @@ func parse_ls_line(line string) (string, storage.Node) {
 		node.Type = storage.File
 	}
 	node.Files = make(storage.NodeMap)
-	parts := filter_spaces(strings.Split(line, " ") )
+	parts := filterSpaces(strings.Split(line, " ") )
 	name := parts[len(parts)-1]
 	return name, node
 }
@@ -41,7 +41,7 @@ func parse_ls_line(line string) (string, storage.Node) {
 // Partiendo desde path, agrega los nodos nuevos
 // al árbol que arranca en root_dir y encola los directorios a procesar en
 // queue.
-func parse_ls(path string, dataserver net.Listener) (storage.Node, []string) {
+func parseLS(path string, dataserver net.Listener) (storage.Node, []string) {
 	node := storage.Node{storage.Dir, 0, path, make(storage.NodeMap)}
 	queue := make([]string, 0)
 	dconn, err := dataserver.Accept()
@@ -55,7 +55,7 @@ func parse_ls(path string, dataserver net.Listener) (storage.Node, []string) {
 		if i == 1 {
 			continue
 		}
-		_str, _node := parse_ls_line(dconnbuf.Text())
+		_str, _node := parseLSLine(dconnbuf.Text())
 		_node.Path = fmt.Sprintf("%s%s/",path,_str)  //TODO if not dir do not add /
 
 		node.Files[_str] = &_node
