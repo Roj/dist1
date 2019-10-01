@@ -13,13 +13,13 @@ services:
   db:
     build:
       context: .
-      dockerfile: db/Dockerfile
+      dockerfile: storage/Dockerfile
 
   ftpserver:
     build: ftpserv
     ports:
      - "1021:21"
-  
+
   ftpserver_broad:
     build: ftpservbroad
     ports:

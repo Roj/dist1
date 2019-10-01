@@ -1,6 +1,7 @@
 FROM golang:alpine
 
 WORKDIR /app
-COPY structures.go daemon/daemon.go /app/
+COPY storage/* /app/storage/
+COPY daemon/daemon.go /app/daemon/
 
-CMD go run structures.go daemon.go
+CMD go run daemon/daemon.go

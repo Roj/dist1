@@ -1,6 +1,8 @@
 FROM golang:alpine
 
 WORKDIR /app
-COPY structures.go worker/worker.go /app/
+COPY worker/* /app/worker/
+COPY storage/* /app/storage/
+COPY worker_server.go /app/
 
-CMD go run structures.go worker.go
+CMD go run worker_server.go
