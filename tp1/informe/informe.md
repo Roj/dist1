@@ -205,5 +205,4 @@ peticiones y las despacha.
 El `daemon` es bastante sencillo, puesto que solo requiere mandar pedidos
 al *worker nameserver* y al *storage server*.
 
-
 ![Diagrama de paquetes de la implementación.](paquetes.png)

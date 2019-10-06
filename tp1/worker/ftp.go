@@ -1,4 +1,5 @@
 package worker
+
 import (
 	"bufio"
 	"fmt"
@@ -6,17 +7,19 @@ import (
 	"strings"
 	"time"
 )
+
 const (
 	noError = iota
 	timeoutError
 	noListener
 )
+
 // Inicia la conexión de control al host destino en puerto 21
 // e inicia la escucha en un puerto indicado para la conexion de datos.
 // Devuelve la conexión de control, el buffer de control y el escuchante
 // en el puerto aleatorio.
-// TODO: credenciales
-func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int)  {
+
+func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int) {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), time.Second)
 	if err != nil {
 		fmt.Println(err)
@@ -31,7 +34,7 @@ func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int
 			break
 		}
 	}
-	dataserver, err := net.Listen("tcp", fmt.Sprintf(":%d",port))
+	dataserver, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		fmt.Println("No se pudo levantar la conexion de datos:", err)
 		conn.Close()
@@ -61,10 +64,9 @@ func setupFTP(host string, port int) (net.Conn, *bufio.Reader, net.Listener, int
 // control conn, indicando que mande los datos al puerto port.
 // Espera a que el servidor indique que se transfirieron los datos.
 func sendFTPCommand(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) {
-	first_octet := port/256
+	first_octet := port / 256
 	second_octet := port - first_octet*256
-	//TODO: ver si tira error, reintentar, backoff, agregar al queue-socket.
-	//TODO IP
+
 	send(conn, fmt.Sprintf("PORT 127,0,0,1,%d,%d\r\n", first_octet, second_octet))
 	for {
 		str, err := connbuf.ReadString('\n')
@@ -87,7 +89,7 @@ func sendFTPCommand(cmd string, conn net.Conn, connbuf *bufio.Reader, port int) 
 			fmt.Printf("<%s", str)
 		}*/
 		if strings.Contains(str, "226") {
-			break;
+			break
 		}
 		if strings.Contains(str, "425") {
 			fmt.Printf("Could not build data connection, retrying in one second.\n")
