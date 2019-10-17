@@ -1,0 +1,7 @@
+FROM golang:alpine
+RUN apk add git && go get github.com/streadway/amqp
+WORKDIR /app
+COPY *.go /app/
+COPY data/* /app/data/
+
+CMD sleep 10 && go run topology.go streamer.go && sleep 20 && go run topology.go collector.go

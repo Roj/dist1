@@ -1,0 +1,7 @@
+FROM golang:alpine
+RUN apk add git && go get github.com/streadway/amqp
+WORKDIR /app
+COPY *.go /app/
+COPY data/atp_players.csv /app/data/atp_players.csv
+
+CMD sleep 5 && go run topology.go worker.go
