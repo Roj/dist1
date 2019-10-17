@@ -3,12 +3,14 @@ services:
   rabbit:
     image: rabbitmq:3.6.6-management
     environment:
-      - RABBITMQ_DEFAULT_USER = guest
-      - RABBITMQ_DEFAULT_PASS = guest
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
   worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
+
   init_collect:
     build:
       context: .

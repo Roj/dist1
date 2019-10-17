@@ -93,7 +93,8 @@ func join(msg string, ch *amqp.Channel, distrib_q amqp.Queue, age_q amqp.Queue, 
 
 	send(ch, age_q, fmt.Sprintf("%d,%d,%s", winner.birthdate, loser.birthdate, winner.name))
 	send(ch, distrib_q, fmt.Sprintf("%s,%s", winner.hand, loser.hand))
-	log.Printf("[join] winner(hand=%s,bd=%d) loser(hand=%s,bd=%d)", winner.hand, winner.birthdate, loser.hand, loser.birthdate)
+	log.Printf("[join] winner(hand=%s,bd=%d) loser(hand=%s,bd=%d)",
+		winner.hand, winner.birthdate, loser.hand, loser.birthdate)
 }
 
 func distribute_hands(msg string, ch *amqp.Channel) {

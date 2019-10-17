@@ -1,4 +1,7 @@
 dependencies:
 	go get github.com/streadway/amqp
 
-.PHONY: dependencies
+informe:
+	cd informe && pandoc informe.md -o informe.pdf
+
+.PHONY: dependencies informe

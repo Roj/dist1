@@ -4,4 +4,4 @@ WORKDIR /app
 COPY *.go /app/
 COPY data/atp_players.csv /app/data/atp_players.csv
 
-CMD sleep 5 && go run topology.go worker.go
+CMD sleep 15 && go run topology.go worker.go
