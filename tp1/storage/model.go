@@ -22,7 +22,7 @@ type Server struct {
 }
 
 type ServerMap map[string]*Server
-func StrNodeType(node Node) string {
+func (node Node) StrNodeType() string {
 	if node.Type == Dir {
 		return "dir"
 	} else if node.Type == Link {
@@ -31,9 +31,9 @@ func StrNodeType(node Node) string {
 		return "file"
 	}
 }
-// Devuelve el nodo del subdirectorio pedido. El segundo
-// elemento es true si hubo exito, o false si no se encontro.
-func GetSubdir(path string, root_dir *Node) (*Node, bool) {
+// Devuelve el nodo del subdirectorio pedido. Si no
+// se encontro se devuelve nil.
+func (root_dir *Node) GetSubdir(path string) *Node {
 	steps := strings.Split(path, "/")
 	node := root_dir
 	for _, subdir := range steps {
@@ -43,14 +43,14 @@ func GetSubdir(path string, root_dir *Node) (*Node, bool) {
 
 		_node, ok := node.Files[subdir]
 		if ! ok {
-			return nil, false
+			return nil
 		}
 		node = _node
 	}
-	return node, true
+	return node
 }
 
-func updateParentsSize(path string, root_dir *Node, size int) {
+func (root_dir *Node) updateParentsSize(path string, size int) {
 	//TODO: factorizar usando funciones de orden superior
 	node := root_dir
 	node.Size = node.Size + size
@@ -63,18 +63,18 @@ func updateParentsSize(path string, root_dir *Node, size int) {
 		node.Size = node.Size + size
 	}
 }
-func AddDir(dict ServerMap, server string, node Node) {
+func (dict ServerMap) AddDir(server string, node Node) {
 
 	// It always exists
-	dbnode, _ := GetSubdir(node.Path, dict[server].Root_dir)
+	dbnode := dict[server].Root_dir.GetSubdir(node.Path)
 	/*encoded, _ := json.Marshal(node)
 	fmt.Printf("add_dir a escribir: %s\n", encoded)
 	encoded, _ = json.Marshal(node)
 	fmt.Printf("add_dir -- en la DB: %s\n", encoded)*/
 	dbnode.Files = node.Files
-	updateParentsSize(node.Path, dict[server].Root_dir, node.Size)
+	dict[server].Root_dir.updateParentsSize(node.Path, node.Size)
 }
-func ShallowCopy(n Node) Node {
+func (n Node) ShallowCopy() Node {
 	shallow := Node{n.Type, n.Size, n.Path, make(NodeMap)}
 	for k, v := range n.Files {
 		shallow.Files[k] = &Node{v.Type, v.Size, v.Path, make(NodeMap)}
@@ -82,15 +82,17 @@ func ShallowCopy(n Node) Node {
 	return shallow
 }
 
-func GetDir(dict ServerMap, host string, path string) ResultsResponse {
+func (dict ServerMap) GetDir(host string, path string) ResultsResponse {
 	var response ResultsResponse
 	if server, ok := dict[host]; ok {
 		response.Finished = server.Finished
-		response.Node = Node{File, 0, "/", make(NodeMap)}
-		node, exists := GetSubdir(path, server.Root_dir)
-		if exists {
-			shallow_node := ShallowCopy(*node)
+
+		node := server.Root_dir.GetSubdir(path)
+		if node != nil {
+			shallow_node := (*node).ShallowCopy()
 			response.Node = shallow_node
+		} else {
+			response.Node = Node{File, 0, "/", make(NodeMap)}
 		}
 
 	} else {

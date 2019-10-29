@@ -4,21 +4,26 @@ import (
 	"sync"
 )
 func main() {
-	//Set up workers
-	resourcesmap := make(worker.ServerResourcesMap)
-	lCh := make(chan string, 10000)
-	wg := new(sync.WaitGroup)
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go worker.Worker(i, lCh, wg, resourcesmap)
-	}
-
-	ns, err := worker.NameServer(lCh)
+	ns, err := worker.NameServer()
 	if err != nil {
 		panic("No se pudo levantar el NameServer")
 	}
+	defer ns.Close()
+
+	//Set up workers
+	var resourcesmap sync.Map
+	lCh := make(chan string, 10000)
+	defer close(lCh)
+
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go worker.Worker(i, lCh, wg, &resourcesmap)
+	}
+
+
 	worker.ProcessRequests(ns, lCh)
 
-	close(lCh)
-	wg.Wait()
 }

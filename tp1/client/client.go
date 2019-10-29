@@ -27,6 +27,7 @@ func main() {
 		fmt.Println(err)
 		panic("No se pudo conectar con el demonio")
 	}
+	defer conn.Close()
 	if args[0] == "analyze" {
 		send(conn, fmt.Sprintf("analyze %s\n", args[1]))
 	} else if args[0] == "summary" {
@@ -44,5 +45,4 @@ func main() {
 			break
 		}
 	}
-	conn.Close()
 }

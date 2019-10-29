@@ -7,13 +7,17 @@ import (
 	"bufio"
 	"time"
 )
+const DBHOSTPORT = "db:11000"
+const SUCCESS_RESPONSE = "OK\n"
+const ALREADY_EXISTS_RESPONSE="ALREADYEXISTS\n"
+
 const (
 	Read = iota
 	Write
 	Newserver
 	Finishserver
 )
-const DBHOSTPORT = "db:11000"
+
 
 type Query struct {
 	Type int
@@ -40,7 +44,7 @@ func send(conn net.Conn, s string) {
 // Manda una query al servidor de storage.
 // Devuelve la respuesta, y si falló la transmisión o no.
 // La transmisión puede ser reintentable.
-func SendQuery(query Query) (string, bool) {
+func (query Query) Send() (string, bool) {
 	conn, err := net.Dial("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
@@ -68,13 +72,18 @@ func SendQuery(query Query) (string, bool) {
 // Si hay error de TCP, reintenta en un segundo.
 // Espera hasta el OK del servidor.
 func sendCommand(query Query) {
-	str, success := SendQuery(query)
-	for !success {
+	str, success := query.Send()
+	i := 0
+	for !success && i < 10 {
 		time.Sleep(time.Second)
-		str, success = SendQuery(query)
+		str, success = query.Send()
+		i+=1
+	}
+	if i == 10 {
+		panic("El servidor de storage no se encuentra disponible. Es posible que se haya caído")
 	}
 
-	if str != "OK\n" {
+	if str != SUCCESS_RESPONSE {
 		fmt.Println("Unknown message ", str)
 	}
 }

@@ -21,7 +21,7 @@ func ProcessRequests(ns net.Listener, lCh chan string) {
 		conn.Close()
 	}
 }
-func NameServer(lCh chan string) (net.Listener, error) {
+func NameServer() (net.Listener, error) {
 	//Set up nameserver
 	ns, err := net.Listen("tcp", ":50000")
 	if err != nil {

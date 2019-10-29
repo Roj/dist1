@@ -2,6 +2,6 @@ FROM golang:alpine
 
 WORKDIR /app
 COPY storage/* /app/storage/
-COPY daemon/daemon.go /app/daemon/
+COPY daemon/* /app/daemon/
 
-CMD go run daemon/daemon.go
+CMD go run daemon/responses.go daemon/daemon.go

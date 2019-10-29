@@ -7,6 +7,7 @@ import (
 	"sync"
 	"io/ioutil"
 )
+
 type persistenceResources struct {
 	lock *sync.Mutex
 	persistedSize int
@@ -16,8 +17,11 @@ func persistServer(servermap ServerMap, presmap persistenceResourcesMap, host st
 	resources := presmap[host]
 	resources.lock.Lock()
 	defer resources.lock.Unlock()
-	encoded, _ := json.Marshal(servermap[host].Root_dir)
-	err := ioutil.WriteFile(host, encoded, 0644)
+	encoded, err := json.Marshal(servermap[host].Root_dir)
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile(host, encoded, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -31,18 +35,18 @@ func processQuery(query Query, servermap ServerMap, presmap persistenceResources
 	switch query.Type {
 	case Read:
 		fmt.Printf("Es una consulta del host %s sobre el directorio %s\n", query.Hostname, query.Node.Path)
-		response := GetDir(servermap, query.Hostname, query.Node.Path)
+		response := servermap.GetDir(query.Hostname, query.Node.Path)
 		encoded, _ := json.Marshal(response)
-		return fmt.Sprintf("%s",encoded)
+		return fmt.Sprintf("%s\n",encoded)
 	case Write:
 		fmt.Printf("Es una escritura del host %s sobre el directorio %s\n", query.Hostname, query.Node.Path)
-		AddDir(servermap, query.Hostname, query.Node)
+		servermap.AddDir(query.Hostname, query.Node)
 		if servermap[query.Hostname].Root_dir.Size > presmap[query.Hostname].persistedSize {
 			persistServer(servermap, presmap, query.Hostname)
 		}
 	case Newserver:
 		if _, ok := servermap[query.Hostname]; ok {
-			return "ALREADYEXISTS"
+			return ALREADY_EXISTS_RESPONSE
 		}
 		servermap[query.Hostname] = &Server{
 			query.Hostname, false, &Node{Dir, 0, "/", make(NodeMap)}}
@@ -56,25 +60,24 @@ func processQuery(query Query, servermap ServerMap, presmap persistenceResources
 	//encoded, _ := json.Marshal(servermap[query.Hostname].root_dir)
 	//fmt.Printf("Ahora el servidor queda como: %s\n", encoded)
 	fmt.Printf("El tamaño actual del host %s es %d\n", query.Hostname, servermap[query.Hostname].Root_dir.Size)
-	return "OK"
+	return SUCCESS_RESPONSE
 }
-func StartServer() (net.Listener, error) {
+func RunController() () {
 	//Setup listen socket
-	dblisten, err := net.Listen("tcp", ":11000")
+	dblisten, err := net.Listen("tcp", DBHOSTPORT)
 	if err != nil {
 		fmt.Println(err)
-		return nil, err
+		return
 	}
+	defer dblisten.Close()
 	fmt.Printf("Listening on port 11000")
-	return dblisten, nil
-}
-func ProcessRequests(dblisten net.Listener) {
+
 	servermap := make(ServerMap)
 	presmap := make(persistenceResourcesMap)
 	for {
-		//fmt.Println("Esperando conexion..")
+		fmt.Println("Esperando conexion..")
 		conn, err := dblisten.Accept()
-		//fmt.Println("[DB] Recibida conexion")
+		fmt.Println("[DB] Recibida conexion")
 		if err != nil {
 			fmt.Println("No se pudo aceptar la conexion: ", err)
 			continue
@@ -96,7 +99,7 @@ func ProcessRequests(dblisten net.Listener) {
 			fmt.Println("No se pudo de-serializar el mensaje: ", err)
 		} else {
 			response := processQuery(query, servermap, presmap)
-			send(conn, fmt.Sprintf("%s\n", response))
+			send(conn, fmt.Sprintf("%s", response))
 		}
 		fmt.Println("Cerrando conexion.")
 		conn.Close()

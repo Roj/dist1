@@ -30,14 +30,14 @@ func send(conn net.Conn, s string) {
 func createDBAnalysis(host string) bool {
 	node := storage.Node{storage.Dir, 0, "/", make(storage.NodeMap)}
 	query := storage.Query{storage.Newserver, host, node}
-	str, sent := storage.SendQuery(query)
+	str, sent := query.Send()
 	if !sent {
 		time.Sleep(time.Second)
 		return createDBAnalysis(host)
 	}
-	if str == "OK\n" {
+	if str == storage.SUCCESS_RESPONSE {
 		return true
-	} else if str == "ALREADYEXISTS\n" {
+	} else if str == storage.ALREADY_EXISTS_RESPONSE {
 		return false
 	}
 	fmt.Println("Unknown message ", str)
@@ -50,24 +50,24 @@ func runAnalysis(host string) string {
 			fmt.Println("Timeout con worker nameserver. Reintentando en 1s.")
 			conn, err = net.DialTimeout("tcp", WORKERHOSTPORT, time.Second)
 			if err != nil {
-				return "TIMEOUT"
+				return TIMEOUT_RESPONSE
 			}
 		}
-		return "Error en conexión al worker nameserver"
+		return CONNECTION_ERROR_RESPONSE
 	}
 	defer conn.Close()
 	if !createDBAnalysis(host) {
-		return fmt.Sprintf("Ya hay un pedido de analisis para el host %s", host)
+		return ANALYSIS_EXISTS_RESPONSE
 	}
 
 	send(conn, fmt.Sprintf("%s /\n", host))
-	return "OK"
+	return SUCCESS_RESPONSE
 }
 func prettyPrintResults(node storage.Node) string {
 	str := ""
 	str = str + fmt.Sprintf("%s (%d bytes)\n", node.Path, node.Size)
 	for k, v := range node.Files {
-		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, storage.StrNodeType(*v), v.Size)
+		str = str + fmt.Sprintf("\t%s (%s, %d bytes)\n", k, (*v).StrNodeType(), v.Size)
 	}
 	return str
 
@@ -76,15 +76,16 @@ func getResult(path string, host string) string {
 	fmt.Println("Armando resultados")
 	node := storage.Node{storage.Dir, 0, path +"/", make(storage.NodeMap)}
 	query := storage.Query{storage.Read, host, node}
-	str, sent := storage.SendQuery(query)
+	str, sent := query.Send()
 	if !sent {
-		return "No se pudo enviar el comando al servidor"
+		return CONNECTION_ERROR_RESPONSE
 	}
 	//Procesar respuesta
 	var response storage.ResultsResponse
 	err := json.Unmarshal([]byte(str), &response)
 	if err != nil {
 		fmt.Printf("Error decoding:%s", err)
+		return INVALID_SERVER_RESPONSE
 	}
 	str = prettyPrintResults(response.Node)
 
@@ -101,7 +102,7 @@ func processRequest(command string) string {
 	if strings.Contains(command, "analyze") {
 		host := ""
 		fmt.Sscanf(command, "analyze %s", &host)
-		return runAnalysis(host) + "\n"
+		return runAnalysis(host)
 	} else if strings.Contains(command, "summary") {
 		host := ""
 		path := ""

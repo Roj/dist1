@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"math/rand"
 	"sync"
 	"time"
 	"../storage"
@@ -18,16 +17,16 @@ type ServerResources struct {
 	nthreads int
 	lock *sync.Mutex
 }
-type ServerResourcesMap map[string]*ServerResources
 
 const MAXTHREADSANDQUEUED = 3
 
 // Inicia los recursos para un servidor FTP si no estaba ya disponible
 // Poscondicion: existe en el mapa la key host, hay al menos un task
 // queued.
-func initServerResources(host string, dict ServerResourcesMap) {
-	if _, ok := dict[host]; !ok {
-		dict[host] = &ServerResources{1, 0, &sync.Mutex{}}
+func initServerResources(host string, dict *sync.Map) {
+	if _, ok := dict.Load(host); !ok {
+		hostres := &ServerResources{1, 0, &sync.Mutex{}}
+		dict.Store(host, hostres)
 	}
 }
 
@@ -45,28 +44,38 @@ func send(conn net.Conn, s string) {
 	}
 }
 
-func registerThread(host string, dict ServerResourcesMap) {
+func registerThread(host string, dict *sync.Map) {
+
 	initServerResources(host, dict)
-	hostres := dict[host]
+	val, _ := dict.Load(host)
+	hostres, casted := val.(*ServerResources)
+	if !casted {
+		panic("No se pudo castear el valor del mapa a un *ServerResources")
+	}
 	hostres.lock.Lock()
+	defer hostres.lock.Unlock()
 	fmt.Printf("[THREAD] Registering thread!!")
 	hostres.nqueued  = hostres.nqueued  - 1
 	hostres.nthreads = hostres.nthreads + 1
-	hostres.lock.Unlock()
 }
 
-func unregisterThread(host string, dict ServerResourcesMap) {
-	hostres := dict[host]
+func unregisterThread(host string, dict *sync.Map) {
+	val, _ := dict.Load(host)
+	hostres, casted := val.(*ServerResources)
+	if !casted {
+		panic("No se pudo castear el valor del mapa a un *ServerResources")
+	}
 	hostres.lock.Lock()
+	defer hostres.lock.Unlock()
 	hostres.nthreads = hostres.nthreads - 1
 	fmt.Printf("[THREAD] Unregistering thread - tasks %d threads %d\n", hostres.nqueued, hostres.nthreads)
 	if hostres.nqueued == 0 && hostres.nthreads == 0 {
 		storage.FinishJob(host)
 	}
-	hostres.lock.Unlock()
 }
 func distributeJobs(queue []string, host string, hostres *ServerResources) []string {
 	hostres.lock.Lock()
+	defer hostres.lock.Unlock()
 	for i:=0; i < MAXTHREADSANDQUEUED - hostres.nthreads - hostres.nqueued; i++ {
 		if len(queue) > 0 {
 			subpath := queue[0]
@@ -80,13 +89,16 @@ func distributeJobs(queue []string, host string, hostres *ServerResources) []str
 			}
 		}
 	}
-	hostres.lock.Unlock()
 	return queue
 }
-func runAnalysis(host string, path string, idworker int, resourcesmap ServerResourcesMap) {
+func runAnalysis(host string, path string, idworker int, resourcesmap *sync.Map) {
 	registerThread(host, resourcesmap)
 	defer unregisterThread(host, resourcesmap)
-	hostres := resourcesmap[host]
+	val, _ := resourcesmap.Load(host)
+	hostres, casted := val.(*ServerResources)
+	if !casted {
+		panic("No se pudo castear el valor del mapa a un *ServerResources")
+	}
 	port := 9100 + idworker
 	conn, connbuf, dataserver, e := setupFTP(host, port)
 	if e == timeoutError {
@@ -104,14 +116,32 @@ func runAnalysis(host string, path string, idworker int, resourcesmap ServerReso
 		runAnalysis(host, path, idworker + 1000, resourcesmap)
 		return
 	}
+	defer conn.Close()
+	defer dataserver.Close()
 
 	it := 0
 	next_thread_check := 0
 	queue := []string{path}
+	fails := 0
 	for len(queue) > 0 {
 		cpath := queue[0]
 		queue = queue[1:]
-		sendFTPCommand(fmt.Sprintf("LIST -AQ %s", cpath), conn, connbuf, port)
+		err := sendFTPCommand(fmt.Sprintf("LIST -AQ %s", cpath), conn, connbuf, port)
+		if err != nil {
+			if fails < 10 {
+				queue = append(queue, cpath)
+				time.Sleep(time.Second)
+				continue
+			}
+			//Si el servidor dejó de responder, volver a encolar
+			//este directorio a la cola general y terminar.
+			requeue := alsoProcess(fmt.Sprintf("%s %s\n", host, path))
+			if ! requeue {
+				panic("Timeout on FTP server and Timeout on Worker queue")
+			}
+			return
+		}
+		fails = 0
 		node, new_queue := parseLS(cpath, dataserver)
 		storage.UpdateNode(host, node)
 
@@ -129,8 +159,6 @@ func runAnalysis(host string, path string, idworker int, resourcesmap ServerReso
 	}
 
 	send(conn, "BYE\r\n")
-	conn.Close()
-	dataserver.Close()
 }
 // Adds a job to this worker server's general queue.
 // In case of timeout it tries once more.
@@ -153,8 +181,7 @@ func alsoProcess(msg string) bool {
 	//fmt.Println("Cerrando alsoprocess")
 }
 
-func Worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap ServerResourcesMap) {
-	rand.Seed(time.Now().UnixNano()+int64(i)*27)
+func Worker(i int, linkChan chan string, wg *sync.WaitGroup, resourcesmap *sync.Map) {
 	defer wg.Done()
 	fmt.Println("Started worker ", i)
 	for dest := range linkChan {
