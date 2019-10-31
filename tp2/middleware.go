@@ -140,7 +140,7 @@ func setupNode(src rabbitQueue, dst1 rabbitQueue, dst2 rabbitQueue, nodeFn Proce
 				dst1.Send(res1)
 				dst2.Send(res2)
 			}
-			d.Ack()
+			d.Ack(false)
 		}
 	}()
 
@@ -163,7 +163,7 @@ func setupFilter(src rabbitQueue, dst rabbitQueue, filterFn Filter) {
 			if filterFn(msg) {
 				dst.Send(Message{msg, ""})
 			}
-			d.Ack()
+			d.Ack(false)
 		}
 	}()
 

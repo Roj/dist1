@@ -7,7 +7,19 @@ import (
 	"bufio"
 	"strconv"
 )
+// Constantes del CSV
+const BIRTHDATE_PLAYERS_COL = 4
+const ID_PLAYERS_COL = 0
+const FIRSTNAME_PLAYERS_COL = 1
+const LASTNAME_PLAYERS_COL = 2
+const HAND_PLAYERS_COL = 3
 
+const WINNERID_GAME_COL = 4
+const LOSERID_GAME_COL = 5
+const SURFACE_GAME_COL = 3
+const MINUTES_GAME_COL = 9
+
+// Types
 type tennisPlayer struct  {
 	name string
 	hand string
@@ -37,9 +49,10 @@ func loadPlayers() playersMap {
 		}
 		parts := strings.Split(eachline, ",")
 
-		birthdate, _ := strconv.ParseInt(parts[4], 10, 64)
-		players[parts[0]] = tennisPlayer{parts[1]+" "+parts[2],
-			parts[3], int(birthdate)}
+		birthdate, _ := strconv.ParseInt(parts[BIRTHDATE_PLAYERS_COL], 10, 64)
+		players[parts[ID_PLAYERS_COL]] = tennisPlayer{
+			parts[FIRSTNAME_PLAYERS_COL]+" "+parts[LASTNAME_PLAYERS_COL],
+			parts[HAND_PLAYERS_COL], int(birthdate)}
 	}
 	return players
 }
@@ -53,10 +66,10 @@ func demux(msg string, _ NodeData) (Message, Message) {
 	}
 	parts := strings.Split(msg[1:], ",")
 
-	//TODO: use constants for this
-	player_ids := Message{fmt.Sprintf("%s,%s", parts[4], parts[5]),""}
-	surface_minutes := Message{fmt.Sprintf("%s,%s", parts[3], parts[9]),""}
-	log.Printf("[demux] sending %s to surface out of %s", fmt.Sprintf("%s,%s", parts[3], parts[9]), parts)
+	player_ids := Message{fmt.Sprintf("%s,%s", parts[WINNERID_GAME_COL], parts[LOSERID_GAME_COL]),""}
+	surface_minutes := Message{fmt.Sprintf("%s,%s", parts[SURFACE_GAME_COL], parts[MINUTES_GAME_COL]),""}
+	log.Printf("[demux] sending %s to surface out of %s",
+		surface_minutes, parts)
 	return player_ids, surface_minutes
 }
 
