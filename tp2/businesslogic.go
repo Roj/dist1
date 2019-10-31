@@ -1,8 +1,7 @@
 package main
-import (surface processor
+import (
 	"log"
 	"strings"
-	"github.com/streadway/amqp"
 	"fmt"
 	"os"
 	"bufio"
@@ -18,7 +17,9 @@ type playersMap map[string]tennisPlayer
 type AdderData struct {
 	Key string
 	Val int
+	Count int
 }
+
 
 func loadPlayers() playersMap {
 	players := playersMap{}
@@ -45,8 +46,8 @@ func loadPlayers() playersMap {
 // Recibe una fila del cs y hace del demultiplicador.
 // La fila tiene un prefijo 0 si es header o 1 si no lo es.
 func demux(msg string, _ NodeData) (Message, Message) {
-	if msg[0] == 0 {
-		return nil, nil
+	if msg[:1] == "0" {
+		return Message{"", ""}, Message{"", ""}
 	} else if msg == "EOS" {
 		return Message{"EOS", ""}, Message{"EOS", ""}
 	}
@@ -61,7 +62,7 @@ func demux(msg string, _ NodeData) (Message, Message) {
 
 func join(msg string, xtra NodeData) (Message, Message) {
 	if msg == "EOS" {
-		return "EOS", "EOS"
+		return Message{"EOS",""}, Message{"EOS",""}
 	}
 	players, ok := xtra.(playersMap)
 	if !ok {
@@ -79,26 +80,21 @@ func join(msg string, xtra NodeData) (Message, Message) {
 }
 
 func distribute_hands(msg string, _ NodeData) (Message, Message){
-	if msg == "EOS" {
-		// . TODO TODO TODO TODO
-		return Message{"EOS", "R"}, Message{"EOS", "L"}
-
-	}
 	parts := strings.Split(msg, ",")
 	w_hand := parts[0]
 	l_hand := parts[1]
 	if w_hand != l_hand && (w_hand == "R" || w_hand == "L") {
-		return Message{"1", w_hand}, nil
+		return Message{"1", w_hand}, Message{"", ""}
 	}
+	return Message{"", ""}, Message{"", ""}
 }
 
 func age_filter(msg string) bool {
 	log.Printf("[age filter] received %s", msg)
-	if msg == "EOS" {
-		send(ch, age_sink_q, "EOS") // . TODO TODO TODO
-		return
-	}
 	//TODO use constants
+	if msg == "EOS" {
+		return true // let it trickle down
+	}
 	parts := strings.Split(msg, ",")
 	winner_birthdate, _ := strconv.ParseInt(parts[0], 10, 32)
 	loser_birthdate, _ := strconv.ParseInt(parts[1], 10, 32)
@@ -108,27 +104,29 @@ func age_filter(msg string) bool {
 
 func distribute_surface(msg string, _ NodeData) (Message, Message) {
 	log.Printf("Distribute surface: received %s", msg)
-	if msg == "EOS" { // . TODO TODO TODO
-		send_exchange(ch, "minutesExchange", "Clay", "EOS")
-		send_exchange(ch, "minutesExchange", "Hard", "EOS")
-		send_exchange(ch, "minutesExchange", "Carpet", "EOS")
-		send_exchange(ch, "minutesExchange", "Grass", "EOS")
-		return
-	}
 	parts := strings.Split(msg, ",")
-	return Message{parts[1], parts[0]}, nil
+	return Message{parts[1], parts[0]}, Message{"", ""}
 }
-setupNode(hardMinutesQueue, collectorQueue, emptyQueue, adder, &AdderData{"Hard", 0})
 
 func adder(msg string, xtra NodeData) (Message, Message) {
 	data, ok := xtra.(*AdderData)
 	if !ok {
 		panic("Could not assert type adder data")
 	}
+
+	if msg == "EOS" {
+
+		results := fmt.Sprintf("%s,%d,%d",data.Key, data.Val, data.Count)
+		log.Printf("[adder %s] received EOS, sending total %s",
+		data.Key, results)
+		return Message{results, ""}, Message{"", ""}
+	}
+
 	value, err := strconv.ParseFloat(msg, 64)
 	failOnError(err, "Could not parse number")
-	*data.Val = data.Val + int(value)
+	data.Val = data.Val + int(value)
+	data.Count = data.Count + 1
 	log.Printf("[adder %s] received %d minutes, now at %d",
 		data.Key, value, data.Val)
-
+	return Message{"", ""}, Message{"", ""}
 }

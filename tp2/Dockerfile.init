@@ -4,4 +4,4 @@ WORKDIR /app
 COPY *.go /app/
 COPY data/* /app/data/
 
-CMD sleep 10 && go run topology.go streamer.go && sleep 20 && go run topology.go collector.go
+CMD sleep 10 && go run middleware.go streamer.go && sleep 20 && go run middleware.go collector.go

@@ -1,5 +1,9 @@
+package main
 import (
 	"errors"
+	"github.com/streadway/amqp"
+	"fmt"
+	"log"
 )
 const (
 	Exchange = iota
@@ -21,6 +25,7 @@ type Message struct {
 type NodeData interface{}
 type Process func(msg1 string, xtra NodeData) (res1 Message, res2 Message)
 type Filter func(msg1 string) bool
+var zeroQ = amqp.Queue{}
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -29,11 +34,11 @@ func failOnError(err error, msg string) {
 }
 
 func (q rabbitQueue) Send(msg Message) error {
-	if q.Type == Empty || msg == nil{
+	if q.Type == Empty || msg.Content == "" {
 		return nil
 	}
 	if q.Type == Exchange {
-		return ch.Publish(
+		return q.Channel.Publish(
 			q.Name, // exchange
 			msg.Key, // routing key
 			false, // mandatory
@@ -44,7 +49,7 @@ func (q rabbitQueue) Send(msg Message) error {
 		})
 	}
 	if q.Type == Queue {
-		return ch.Publish(
+		return q.Channel.Publish(
 			"",
 			q.Name,
 			false,
@@ -61,15 +66,15 @@ func (q rabbitQueue) SetUp() rabbitQueue {
 		return q
 	}
 	if q.Type == Queue {
-		work_q, err := ch.QueueDeclare(q.Name,
+		work_q, err := q.Channel.QueueDeclare(q.Name,
 			true, false, false, false, nil)
-		failOnError(err, fmt.Sprintf("Failed to create queue named %s", name))
+		failOnError(err, fmt.Sprintf("Failed to create queue named %s", q.Name))
 		q.AmqpQueue = work_q
 		return q
 	}
 	// Only BindedQueue and Exchange remain. Both need to
 	// declare an Exchange.
-	err := ch.ExchangeDeclare(
+	err := q.Channel.ExchangeDeclare(
 		q.Name,   // name
 		"direct", // type
 		true,     // durable
@@ -78,63 +83,87 @@ func (q rabbitQueue) SetUp() rabbitQueue {
 		false,    // no-wait
 		nil,      // arguments
 	)
-	failOnError(err, fmt.Sprintf("Failed to declare %s", name))
+	failOnError(err, fmt.Sprintf("Failed to declare %s", q.Name))
 	if q.Type == Exchange {
 		return q
 	}
 
 	// This one is different because it is exclusive and non durable.
-	work_q, err := ch.QueueDeclare(
+	work_q, err := q.Channel.QueueDeclare(
 		"", false, false, true, false, nil)
 	failOnError(err, "Failed to declare a queue")
 
-	err = ch.QueueBind(
-		work_q.Name, q.key, q.Name, false, nil)
+	err = q.Channel.QueueBind(
+		work_q.Name, q.Key, q.Name, false, nil)
 	failOnError(err, "Failed to bind queue to exchange")
 	q.AmqpQueue = work_q
 	return q
 }
 func setupNode(src rabbitQueue, dst1 rabbitQueue, dst2 rabbitQueue, nodeFn Process, extra NodeData) {
-	srcQ = src.SetUp()
-	dst1 = src.SetUp()
-	dst2 = src.SetUp()
+	src = src.SetUp()
+	dst1 = dst1.SetUp()
+	dst2 = dst2.SetUp()
 
-	msgs, err := srcQ.Channel.Consume(
-		srcQ.AmqpQueue.Name,
-		"", true, false, false, false, nil)
+	msgs, err := src.Channel.Consume(
+		src.AmqpQueue.Name,
+		"", false, false, false, false, nil)
 	failOnError(err, "[node] Could not consume")
 	go func() {
 		i := 0
 		for d := range msgs {
 			i = i+1
 			msg := string(d.Body)
-			log.Printf("[node] processing message %d of %d bytes",
-				i, len(msg))
-			res1, res2 := nodeFn(msg, extra)
-			dst1.Send(res1)
-			dst2.Send(res2)
+			log.Printf("[%s] processing message %d of %d bytes - msg is %s",
+				src.Name, i, len(msg), msg)
+			// If this looks like a hack it might be because it is.
+			// A proper way to do it would be to register exchange keys
+			// in a configuration structure such that this function can
+			// load up all the different keys.
+			// It couldn't be done using the current interfaces because
+			// a function can only return at most two values and therefore
+			// send no more than two messages.
+			if msg == "EOS" && dst1.Type == Exchange {
+				log.Printf("[%s] received EOS and is of type exchange", src.Name)
+				if dst1.Name == "minutesExchange" {
+					dst1.Send(Message{"EOS", "Hard"})
+					dst1.Send(Message{"EOS", "Clay"})
+					dst1.Send(Message{"EOS", "Grass"})
+					dst1.Send(Message{"EOS", "Carpet"})
+				} else if dst1.Name == "handsExchange" {
+					dst1.Send(Message{"EOS", "L"})
+					dst1.Send(Message{"EOS", "R"})
+				}
+			} else {
+
+				res1, res2 := nodeFn(msg, extra)
+				log.Printf("[%s] sending %s and %s", src.Name, res1.Content, res2.Content)
+				dst1.Send(res1)
+				dst2.Send(res2)
+			}
+			d.Ack()
 		}
 	}()
 
-} //Demux, handProcessor, surface (demuxsurface to minutes), distrib hands
+}
 func setupFilter(src rabbitQueue, dst rabbitQueue, filterFn Filter) {
-	srcQ = src.SetUp()
-	dst = src.SetUp()
+	src = src.SetUp()
+	dst = dst.SetUp()
 
-	msgs, err := srcQ.Channel.Consume(
-		srcQ.AmqpQueue.Name,
-		"", true, false, false, false, nil)
+	msgs, err := src.Channel.Consume(
+		src.AmqpQueue.Name,
+		"", false, false, false, false, nil)
 	failOnError(err, "[filter node] Could not consume")
 	go func() {
 		i := 0
 		for d := range msgs {
 			i = i+1
 			msg := string(d.Body)
-			log.Printf("[filter node] processing message %d of %d bytes",
-				i, len(msg))
+			log.Printf("[filter node] processing message %d of %d bytes - msg is %s",
+				i, len(msg), msg)
 			if filterFn(msg) {
-				dst.Send(msg)
+				dst.Send(Message{msg, ""})
 			}
+			d.Ack()
 		}
 	}()
 

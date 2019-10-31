@@ -4,25 +4,14 @@ import (
 	"log"
 	"fmt"
 	"bufio"
-	"github.com/streadway/amqp"
 )
-func send(ch *amqp.Channel, queue amqp.Queue, message string) error {
-	return ch.Publish(
-		"",
-		queue.Name,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body: []byte(message),
-		})
-}
+
 func main() {
 	conn, ch := setupRabbitSession()
 	defer conn.Close()
 	defer ch.Close()
 
-	stream_q := setupStreamQueue(ch)
+	stream_q := rabbitQueue{Queue, "stream_queue", "", zeroQ, ch}
 
 	file, err := os.Open("data/atp_matches_2000.csv")
 	//file, err := os.Open("data/atp_head.csv")
@@ -42,10 +31,10 @@ func main() {
 			eachline = "1"+eachline
 		}
 		//fmt.Println(eachline)
-		err = send(ch, stream_q, eachline)
-		failOnError(err, "Error publishing")
+		stream_q.Send(Message{eachline, ""})
+		i = i + 1
 	}
-	err = send(ch, stream_q, "EOS")
+	err = stream_q.Send(Message{"EOS", ""})
 	failOnError(err, "Error sending end of stream")
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
