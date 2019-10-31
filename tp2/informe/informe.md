@@ -1,9 +1,73 @@
 ---
 title: Trabajo Práctico 2
-author: Joaquin Torré Zaffaroni (98314)
-toc: yes
 geometry: margin=2.5cm
 ---
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+\ \ \
+
+**Alumno**: Joaquín Torré Zaffaroni
+
+**Padrón**: 98314
+
+**Materia**: Sistemas Distribuidos I
+
+**Cuatrimestre**: 2do 2019
+
+**Docentes**: Pablo D. Roca, Ezequiel Torres Feyuk
+
+\newpage
 
 ## Introducción
 
@@ -112,9 +176,9 @@ promedio por tipo de suelo.
 
 ![Diagrama de despliegue de la arquitectura.](despliegue.png)
 
-En la Figura 4 se ve un diagrama de despliegue de la arquitectura. En principio
-el nodo *Worker* se puede paralelizar, mientras se mantenga la invariante
-respecto de los nodos distribuídos con claves de ruteo. El cliente inicia
+En la Figura 4 se ve un diagrama de despliegue de la arquitectura. Observamos
+una diferenciación entre un Worker que tiene nodos que no se pueden paralelizar
+y un Worker que se puede paralelizar. El cliente inicia
 el envío de los datos a través de una cola de RabbitMQ y junta los resultados
 a través del *MOM*.
 
@@ -126,15 +190,18 @@ a través del *MOM*.
 En la Figura 5 se muestra la relación entre los paquetes de la implementación.
 Enumeramos:
 
-* *worker*: contiene los componentes asociados al trabajo
-    + *topology*: define funciones auxiliares para la creación de las colas,
-    *exchanges* y *binded queues* del flujo de datos.
-    + *worker*: define la lógica de operación de los nodos del flujo de datos.
-* *cliente*: contiene los componentes asociados a la entrada de datos y a
+* `worker`: contiene los componentes asociados al trabajo
+    + `business logic`: define las funciones puras relacionadas a las reglas
+    del negocio
+    + `worker`: instancia los nodos del *middleware* con las reglas de negocio,
+    definiendo el DAG.
+* `cliente`: contiene los componentes asociados a la entrada de datos y a
 la recolección de resultados
-    + *streamer*: convierte un archivo CSV a un *stream* para ser procesado,
+    + `streamer`: convierte un archivo CSV a un *stream* para ser procesado,
     marcando con un `EOS` al final.
-    + *collector*: escucha las colas de resultados y escribe los valores en disco.
+    + `collector`: escucha las colas de resultados y escribe los valores en disco.
+* `middleware`: define los objetos de nodos y da una interfaz de comunicación
+utilizando *queues*, *exchanges* y *bind queues*.
 
 ## Escenarios
 
