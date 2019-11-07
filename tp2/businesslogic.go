@@ -19,6 +19,7 @@ const LOSERID_GAME_COL = 5
 const SURFACE_GAME_COL = 3
 const MINUTES_GAME_COL = 9
 
+
 // Types
 type tennisPlayer struct  {
 	name string
@@ -59,10 +60,8 @@ func loadPlayers() playersMap {
 // Recibe una fila del cs y hace del demultiplicador.
 // La fila tiene un prefijo 0 si es header o 1 si no lo es.
 func demux(msg string, _ NodeData) (Message, Message) {
-	if msg[:1] == "0" {
+	if msg[:1] == "0" || msg == STOP {
 		return Message{"", ""}, Message{"", ""}
-	} else if msg == "EOS" {
-		return Message{"EOS", ""}, Message{"EOS", ""}
 	}
 	parts := strings.Split(msg[1:], ",")
 
@@ -74,8 +73,8 @@ func demux(msg string, _ NodeData) (Message, Message) {
 }
 
 func join(msg string, xtra NodeData) (Message, Message) {
-	if msg == "EOS" {
-		return Message{"EOS",""}, Message{"EOS",""}
+	if msg == STOP {
+		return Message{"",""}, Message{"",""}
 	}
 	players, ok := xtra.(playersMap)
 	if !ok {
@@ -93,6 +92,9 @@ func join(msg string, xtra NodeData) (Message, Message) {
 }
 
 func distribute_hands(msg string, _ NodeData) (Message, Message){
+	if msg == STOP {
+		return Message{"", ""}, Message{"", ""}
+	}
 	parts := strings.Split(msg, ",")
 	w_hand := parts[0]
 	l_hand := parts[1]
@@ -104,10 +106,7 @@ func distribute_hands(msg string, _ NodeData) (Message, Message){
 
 func age_filter(msg string) bool {
 	log.Printf("[age filter] received %s", msg)
-	//TODO use constants
-	if msg == "EOS" {
-		return true // let it trickle down
-	}
+
 	parts := strings.Split(msg, ",")
 	winner_birthdate, _ := strconv.ParseInt(parts[0], 10, 32)
 	loser_birthdate, _ := strconv.ParseInt(parts[1], 10, 32)
@@ -116,6 +115,9 @@ func age_filter(msg string) bool {
 }
 
 func distribute_surface(msg string, _ NodeData) (Message, Message) {
+	if msg == STOP {
+		return Message{"", ""}, Message{"", ""}
+	}
 	log.Printf("Distribute surface: received %s", msg)
 	parts := strings.Split(msg, ",")
 	return Message{parts[1], parts[0]}, Message{"", ""}
@@ -127,8 +129,7 @@ func adder(msg string, xtra NodeData) (Message, Message) {
 		panic("Could not assert type adder data")
 	}
 
-	if msg == "EOS" {
-
+	if msg == STOP {
 		results := fmt.Sprintf("%s,%d,%d",data.Key, data.Val, data.Count)
 		log.Printf("[adder %s] received EOS, sending total %s",
 		data.Key, results)

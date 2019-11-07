@@ -102,6 +102,14 @@ func main() {
 		dispatcher(arg, ch)
 	}
 
+	//Now that all goroutines are running, if we are tasked
+	//with the watcher role we can occupy the main thread with it.
+	for _, arg := range argsWithoutProg {
+		if arg == "watcher:1" {
+			log.Printf("[*] Running watcher.")
+			processWatcher(ch)
+		}
+	}
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
 

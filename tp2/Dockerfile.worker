@@ -4,4 +4,4 @@ WORKDIR /app
 COPY *.go /app/
 COPY data/atp_players.csv /app/data/atp_players.csv
 
-CMD sleep 5 && go run middleware.go businesslogic.go worker.go -- demux:1 join:1 distribute_hands:1 distribute_surface:1 age_filter:1
+CMD sleep 5 && go run middleware.go businesslogic.go worker.go -- demux:5 join:5 distribute_hands:5 distribute_surface:5 age_filter:5
